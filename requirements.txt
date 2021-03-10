@@ -5,3 +5,4 @@ cairosvg=2.5.1=pyhd8ed1ab_0
 flatland-rl=2.2.1=pypi_0
 pycairo=1.20.0=py36h5aee470_1
 tk=8.6.10=he774522_0
+keras-rl=0.4.2

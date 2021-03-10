@@ -1,3 +1,5 @@
+from symbol import import_from
+
 import numpy as np
 import time
 
@@ -9,7 +11,13 @@ from flatland.utils.rendertools import RenderTool
 
 import config as cfg
 import logger as log
+from tensorflow.keras import Input
+from tensorflow.keras.layers import Dense, ReLU
+from tensorflow.keras.model import Model
+from tensorflow.keras.optimizers import Adam
 from agent import Agent
+from rl.agents import DQNAgent
+
 
 env = RailEnv(width=20, height=20,
               rail_generator=random_rail_generator(),
@@ -19,6 +27,10 @@ env_renderer = RenderTool(env)
 logger = log.setup_logger('run', 'logs/run.txt')
 
 agent = Agent()
+
+input_block = Input()
+#only model required
+kerasAgent = DQNAgent()
 
 # Empty dictionary for all agent action
 action_dict = dict()
