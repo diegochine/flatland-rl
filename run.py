@@ -1,7 +1,7 @@
 import numpy as np
 import time
 
-from flatland.envs.observations import TreeObsForRailEnv
+from flatland.envs.observations import GlobalObsForRailEnv
 from flatland.envs.rail_generators import random_rail_generator
 from flatland.envs.schedule_generators import complex_schedule_generator
 from flatland.envs.rail_env import RailEnv
@@ -11,21 +11,10 @@ import config as cfg
 import logger as log
 from agent import Agent
 
-transition_probability = [1.0,  # empty cell - Case 0
-                          1.0,  # Case 1 - straight
-                          1.0,  # Case 2 - simple switch
-                          0.3,  # Case 3 - diamond drossing
-                          0.5,  # Case 4 - single slip
-                          0.5,  # Case 5 - double slip
-                          0.2,  # Case 6 - symmetrical
-                          0.0,  # Case 7 - dead end
-                          0.2,  # Case 8 - turn left
-                          0.2,  # Case 9 - turn right
-                          1.0]  # Case 10 - mirrored switch
 env = RailEnv(width=20, height=20,
-              rail_generator=random_rail_generator(cell_type_relative_proportion=transition_probability),
+              rail_generator=random_rail_generator(),
               number_of_agents=cfg.NUMBER_OF_AGENTS,
-              obs_builder_object=TreeObsForRailEnv(max_depth=2))
+              obs_builder_object=GlobalObsForRailEnv())
 env_renderer = RenderTool(env)
 logger = log.setup_logger('run', 'logs/run.txt')
 
