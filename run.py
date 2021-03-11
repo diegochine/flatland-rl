@@ -11,8 +11,7 @@ from flatland.utils.rendertools import RenderTool
 
 import config as cfg
 import logger as log
-from tensorflow.keras import Input
-from tensorflow.keras.layers import Dense, ReLU
+from tensorflow.keras.layers as layers
 from tensorflow.keras.model import Model
 from tensorflow.keras.optimizers import Adam
 from agent import Agent
@@ -26,11 +25,17 @@ env = RailEnv(width=20, height=20,
 env_renderer = RenderTool(env)
 logger = log.setup_logger('run', 'logs/run.txt')
 
-agent = Agent()
+#  agent = Agent()
 
-input_block = Input()
-#only model required
-kerasAgent = DQNAgent()
+input_block = layers.Flatten(input_shape=(20,20,23))
+x = layers.Dense(128, activation='relu')(input_block)
+output = layers.Dense(cfg.NUM_ACTIONS, activation'linear')(x)
+model = Model(input=input_block, outputs=output)
+
+# only model required
+kerasAgent = DQNAgent(model)
+kerasAgent.compile(Adam(lr=1e-3), metrics=['mse'])
+kerasAgent.fit(env, nb_steps=10000, visualize=True, verbose=2)
 
 # Empty dictionary for all agent action
 action_dict = dict()
