@@ -52,6 +52,8 @@ for episode in range(cfg.N_EPISODES):
     # Here you can also further enhance the provided observation by means of normalization
     # See training navigation example in the baseline repository
 
+    # vedi classe preprocessor di keras rl per far fare all'agente un preprocess dell'input
+
     score = 0
     step = 0
     done = {'__all__': False}
