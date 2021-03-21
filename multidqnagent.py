@@ -33,12 +33,15 @@ class MultiDQNAgent(DQNAgent):
         actions = {}
         for a in range(self.nb_agents):
             # Select an action.
-            state = [observation[a]]
-            q_values = self.compute_q_values(state)
-            if self.training:
-                action = self.policy.select_action(q_values=q_values)
+            if observation[a] is not None:
+                state = [observation[a]]
+                q_values = self.compute_q_values(observation[a])
+                if self.training:
+                    action = self.policy.select_action(q_values=q_values)
+                else:
+                    action = self.test_policy.select_action(q_values=q_values)
             else:
-                action = self.test_policy.select_action(q_values=q_values)
+                action = 0
             actions.update({a: action})
 
         # Book-keeping.
@@ -183,11 +186,11 @@ class MultiDQNAgent(DQNAgent):
         self._logger.info("Starting Training")
 
         for episode in range(nb_episodes):
-            self._logger.info(f'EPISODE {episode:2d}/{cfg.N_EPISODES:2d}')
+            self._logger.info(f'EPISODE {episode:2d}/{nb_episodes}')
             # Reset environment and get initial observations for all agents
             next_obs, info = env.reset()
             # env_renderer.reset()
-            episode_score = 0
+            episode_reward = 0
             step = 0
             done = {'__all__': False}
             # Run episode
@@ -195,44 +198,37 @@ class MultiDQNAgent(DQNAgent):
                 self._logger.info(f'STEP {step:3d}/{nb_max_episode_steps:3d}')
                 callbacks.on_step_begin(step)
                 # Chose an action for each agent in the environment
-                info = next_obs[1]
-                obs = [self.processor.process_observation(o) for o in next_obs[0]]
+                obs = {o: self.processor.process_observation(next_obs[o])
+                       for o in next_obs if next_obs[o] is not None}
+                obs.update({o: None
+                            for o in next_obs if next_obs[o] is None})
                 action_dict = self.forward(obs)
 
                 callbacks.on_action_begin(action_dict)
                 # Environment step which returns the observations for all agents, their corresponding
                 # reward and whether their are done
-                next_obs, all_rewards, done, _ = env.step(action_dict)
+                next_obs, all_rewards, done, info = env.step(action_dict)
                 # env_renderer.render_env(show=True, show_observations=True, show_predictions=False)7
                 callbacks.on_action_end(action_dict)
 
                 # Update replay buffer and train agent
                 metrics = self.backward(all_rewards, done)
-                episode_score += sum(all_rewards)
+                episode_reward += sum(all_rewards.values())
                 step += 1
                 step_logs = {
                     'action': action_dict,
                     'observation': obs,
-                    'reward': episode_score,
+                    'reward': episode_reward,
                     'metrics': metrics,
                     'episode': step,
+                    'info': {}
                 }
                 callbacks.on_step_end(step, step_logs)
                 self.step += 1
 
-            if done['__all__']:
-                # We are in a terminal state but the agent hasn't yet seen it. We therefore
-                # perform one more forward-backward call and simply ignore the action before
-                # resetting the environment. We need to pass in terminal=False here since
-                # the *next* state, that is the state of the newly reset environment, is
-                # always non-terminal by convention.
-                obs = [self.processor.process_observation(o) for o in next_obs[0]]
-                self.forward(obs)
-                self.backward(0., terminal=False)
-
             # This episode is finished, report and reset.
             episode_logs = {
-                'episode_score': episode_score,
+                'episode_reward': episode_reward,
                 'nb_episode_steps': step,
                 'nb_steps': self.step,
             }

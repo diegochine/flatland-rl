@@ -2,8 +2,7 @@ import numpy as np
 import time
 
 from flatland.envs.observations import GlobalObsForRailEnv
-from flatland.envs.rail_generators import random_rail_generator
-from flatland.envs.schedule_generators import complex_schedule_generator
+from flatland.envs.rail_generators import sparse_rail_generator
 from flatland.envs.rail_env import RailEnv
 from flatland.utils.rendertools import RenderTool
 
@@ -17,16 +16,14 @@ import logger as log
 from processor import FlatLandProcessor
 from multidqnagent import MultiDQNAgent
 
-env = RailEnv(width=20, height=20,
-              rail_generator=random_rail_generator(),
+env = RailEnv(width=cfg.WIDTH, height=cfg.HEIGHT,
+              rail_generator=sparse_rail_generator(),
               number_of_agents=cfg.NUMBER_OF_AGENTS,
               obs_builder_object=GlobalObsForRailEnv())
 env_renderer = RenderTool(env)
 logger = log.setup_logger('run', 'logs/run.txt')
 
-#  agent = Agent()
-
-inputs = layers.Input(shape=(20, 20, 23))
+inputs = layers.Input(shape=(env.width, env.height, 23))
 x = layers.Flatten()(inputs)
 x = layers.Dense(128, activation='relu')(x)
 output = layers.Dense(cfg.NUM_ACTIONS, activation='linear')(x)
