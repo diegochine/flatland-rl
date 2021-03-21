@@ -1,10 +1,13 @@
 import numpy as np
+from rl.agents import DQNAgent
+from rl.callbacks import TrainIntervalLogger, TrainEpisodeLogger, Visualizer, CallbackList
+from tf.keras.callbacks import History
 
 import config as cfg
 import logger as log
 
 
-class Agent:
+class Agent(DQNAgent):
     """Abstract base class for all implemented agents.
     Each agent interacts with the environment (as defined by the `Env` class) by first observing the
     state of the environment. Based on this observation the agent changes the environment by performing
@@ -22,50 +25,37 @@ class Agent:
     def __init__(self, name='agent'):
         self._logger = log.setup_logger(name, f'{"logs/" + name + ".txt"}')
 
-    def act(self, state):
-        """
-        :param state: observation
-        :return action given current policy
-        """
-        return np.random.randint(0, 5)
+    def fit(self, env, nb_steps, action_repetition=1, callbacks=None, verbose=1,
+            visualize=False, nb_max_start_steps=0, start_step_policy=None, log_interval=10000,
+            nb_max_episode_steps=None):
+        if not self.compiled:
+            raise RuntimeError(
+                'Your tried to fit your agent but it hasn\'t been compiled yet. Please call `compile()` before `fit()`.')
 
-    def forward(self, observation):
-        """Takes the an observation from the environment and returns the action to be taken next.
-        If the policy is implemented by a neural network, this corresponds to a forward (inference) pass.
-        # Argument
-            observation (object): The current observation from the environment.
-        # Returns
-            The next action to be executed in the environment.
-        """
-        raise NotImplementedError()
+        self.training = True
+        callbacks = [] if not callbacks else callbacks[:]
 
-    def backward(self, reward, terminal):
-        """Updates the agent after having executed the action returned by `forward`.
-        If the policy is implemented by a neural network, this corresponds to a weight update using back-prop.
-        # Argument
-            reward (float): The observed reward after executing the action returned by `forward`.
-            terminal (boolean): `True` if the new state of the environment is terminal.
-        # Returns
-            List of metrics values
-        """
-        raise NotImplementedError()
+        if verbose == 1:
+            callbacks += [TrainIntervalLogger(interval=log_interval)]
+        elif verbose > 1:
+            callbacks += [TrainEpisodeLogger()]
+        if visualize:
+            callbacks += [Visualizer()]
+        history = History()
+        callbacks += [history]
+        callbacks = CallbackList(callbacks)
+        if hasattr(callbacks, 'set_model'):
+            callbacks.set_model(self)
+        else:
+            callbacks._set_model(self)
+        callbacks._set_env(env)
+        params = {
+            'nb_steps': nb_steps,
+        }
+        if hasattr(callbacks, 'set_params'):
+            callbacks.set_params(params)
+        else:
+            callbacks._set_params(params)
+        self._on_train_begin()
+        callbacks.on_train_begin()
 
-    def _build_model(self):
-        """Compiles an agent and the underlaying models to be used for training and testing.
-        """
-        raise NotImplementedError()
-
-    def load_weights(self, filepath):
-        """Loads the weights of an agent from an HDF5 file.
-        # Arguments
-            filepath (str): The path to the HDF5 file.
-        """
-        raise NotImplementedError()
-
-    def save_weights(self, filepath, overwrite=False):
-        """Saves the weights of an agent as an HDF5 file.
-        # Arguments
-            filepath (str): The path to where the weights should be saved.
-            overwrite (boolean): If `False` and `filepath` already exists, raises an error.
-        """
-        raise NotImplementedError()
