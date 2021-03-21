@@ -11,12 +11,12 @@ from flatland.utils.rendertools import RenderTool
 
 import config as cfg
 import logger as log
-from tensorflow.keras.layers as layers
-from tensorflow.keras.model import Model
-from tensorflow.keras.optimizers import Adam
+import keras.layers as layers
+from keras.models import Model
+from keras.optimizers import Adam
 from agent import Agent
 from rl.agents import DQNAgent
-
+from rl.memory import SequentialMemory
 
 env = RailEnv(width=20, height=20,
               rail_generator=random_rail_generator(),
@@ -27,15 +27,17 @@ logger = log.setup_logger('run', 'logs/run.txt')
 
 #  agent = Agent()
 
-input_block = layers.Flatten(input_shape=(20,20,23))
-x = layers.Dense(128, activation='relu')(input_block)
-output = layers.Dense(cfg.NUM_ACTIONS, activation'linear')(x)
-model = Model(input=input_block, outputs=output)
+inputs = layers.Input(shape=(20, 20, 23))
+x = layers.Flatten()(inputs)
+x = layers.Dense(128, activation='relu')(x)
+output = layers.Dense(cfg.NUM_ACTIONS, activation='linear')(x)
+model = Model(inputs=inputs, outputs=output)
 
-# only model required
-kerasAgent = DQNAgent(model)
+memory = SequentialMemory(limit=10000, window_length=1)
+kerasAgent = DQNAgent(model, memory=memory, nb_actions=cfg.NUM_ACTIONS)
 kerasAgent.compile(Adam(lr=1e-3), metrics=['mse'])
 kerasAgent.fit(env, nb_steps=10000, visualize=True, verbose=2)
+exit(19)
 
 # Empty dictionary for all agent action
 action_dict = dict()
