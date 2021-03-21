@@ -1,5 +1,3 @@
-from symbol import import_from
-
 import numpy as np
 import time
 
@@ -9,14 +7,15 @@ from flatland.envs.schedule_generators import complex_schedule_generator
 from flatland.envs.rail_env import RailEnv
 from flatland.utils.rendertools import RenderTool
 
-import config as cfg
-import logger as log
 import keras.layers as layers
 from keras.models import Model
 from keras.optimizers import Adam
-from agent import Agent
 from rl.agents import DQNAgent
 from rl.memory import SequentialMemory
+
+import config as cfg
+import logger as log
+from preprocessor import FlatLandProcessor
 
 env = RailEnv(width=20, height=20,
               rail_generator=random_rail_generator(),
@@ -32,9 +31,9 @@ x = layers.Flatten()(inputs)
 x = layers.Dense(128, activation='relu')(x)
 output = layers.Dense(cfg.NUM_ACTIONS, activation='linear')(x)
 model = Model(inputs=inputs, outputs=output)
-
+processor = FlatLandProcessor()
 memory = SequentialMemory(limit=10000, window_length=1)
-kerasAgent = DQNAgent(model, memory=memory, nb_actions=cfg.NUM_ACTIONS)
+kerasAgent = DQNAgent(model, memory=memory, processor=processor, nb_actions=cfg.NUM_ACTIONS)
 kerasAgent.compile(Adam(lr=1e-3), metrics=['mse'])
 kerasAgent.fit(env, nb_steps=10000, visualize=True, verbose=2)
 exit(19)
