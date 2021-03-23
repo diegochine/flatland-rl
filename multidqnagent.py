@@ -53,6 +53,7 @@ class MultiDQNAgent(DQNAgent):
     def backward(self, all_rewards, terminal):
         # Store most recent experience in memory.
         if self.step % self.memory_interval == 0:
+            self._logger.info(f'Memory saved at STEP {self.step:3d}')
             for a in range(self.nb_agents):
                 self.memory.append(self.recent_observation[a], self.recent_action[a], all_rewards[a], terminal,
                                    training=self.training)
@@ -65,6 +66,7 @@ class MultiDQNAgent(DQNAgent):
 
         # Train the network on a single stochastic batch.
         if self.step > self.nb_steps_warmup and self.step % self.train_interval == 0:
+            self._logger.info(f'Training at STEP {self.step:3d}')
             experiences = self.memory.sample(self.batch_size)
             assert len(experiences) == self.batch_size
 
@@ -135,6 +137,7 @@ class MultiDQNAgent(DQNAgent):
             # Finally, perform a single update on the entire batch. We use a dummy target since
             # the actual loss is computed in a Lambda layer that needs more complex input. However,
             # it is still useful to know the actual target to compute metrics properly.
+            self._logger.info(f'Training on minibatch of size {self.batch_size}')
             ins = [state0_batch] if type(self.model.input) is not list else state0_batch
             metrics = self.trainable_model.train_on_batch(ins + [targets, masks], [dummy_targets, targets])
             metrics = [metric for idx, metric in enumerate(metrics) if
@@ -144,6 +147,7 @@ class MultiDQNAgent(DQNAgent):
                 metrics += self.processor.metrics
 
             if self.target_model_update >= 1 and self.step % self.target_model_update == 0:
+                self._logger.info(f'Updating target model at STEP {self.step:3d}')
                 self.update_target_model_hard()
 
             return metrics
