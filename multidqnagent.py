@@ -93,6 +93,7 @@ class MultiDQNAgent(DQNAgent):
             assert len(action_batch) == len(reward_batch)
 
             # Compute Q values for mini-batch update.
+            self._logger.info(f'Computing Q values')
             if self.enable_double_dqn:
                 # According to the paper "Deep Reinforcement Learning with Double Q-learning"
                 # (van Hasselt et al., 2015), in Double DQN, the online network predicts the actions
