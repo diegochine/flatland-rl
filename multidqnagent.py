@@ -77,8 +77,8 @@ class MultiDQNAgent(DQNAgent):
             terminal1_batch = []
             state1_batch = []
             for e in experiences:
-                state0_batch.append(e.state0)
-                state1_batch.append(e.state1)
+                state0_batch.append(e.state0[0])
+                state1_batch.append(e.state1[0])
                 reward_batch.append(e.reward)
                 action_batch.append(e.action)
                 terminal1_batch.append(0. if e.terminal1 else 1.)
@@ -217,7 +217,7 @@ class MultiDQNAgent(DQNAgent):
                 callbacks.on_action_end(action_dict)
 
                 # Update replay buffer and train agent
-                metrics = self.backward(all_rewards, done)
+                metrics = self.backward(all_rewards, done['__all__'])
                 episode_reward += sum(all_rewards.values())
                 step += 1
                 step_logs = {
