@@ -1,71 +1,102 @@
 import numpy as np
-
+from random import sample
+from collections import deque
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.optimizers import Adam
+from keras.regularizers import l1_l2, l2
 import config as cfg
-import logger as log
 
 
-class Agent:
-    """Abstract base class for all implemented agents.
-    Each agent interacts with the environment (as defined by the `Env` class) by first observing the
-    state of the environment. Based on this observation the agent changes the environment by performing
-    an action.
-    Do not use this abstract base class directly but instead use one of the concrete agents implemented.
-    Each agent realizes a reinforcement learning algorithm. Since all agents conform to the same
-    interface, you can use them interchangeably.
-    To implement your own agent, you have to implement the following methods:
-    - `forward`
-    - `backward`
-    - `load_weights`
-    - `save_weights`
-    """
+class DQNAgent:
 
-    def __init__(self, name='agent'):
-        self._logger = log.setup_logger(name, f'{"logs/" + name + ".txt"}')
+    def __init__(self, state_shape, action_shape, model=None, gamma=cfg.GAMMA, learning_rate=cfg.LEARNING_RATE,
+                 epsilon=cfg.EPSILON, epsilon_decay=cfg.EPSILON_DECAY, epsilon_min=cfg.EPSILON_MIN,
+                 memory_size=cfg.MEMORY_SIZE, min_memories=cfg.MIN_MEMORIES):
+        self.state_shape = state_shape
+        self.action_shape = action_shape
+
+        self.memory = deque(maxlen=memory_size)
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.epsilon_decay = epsilon_decay
+        self.epsilon_min = epsilon_min
+        self.learning_rate = learning_rate
+        self.min_memories = min_memories
+
+        if model is None:
+            self.model = self._build_model()
+        else:
+            self.model = model
+            self.model.compile(loss='mse', optimizer=Adam(self.learning_rate))
+
+    def _build_model(self):
+        model = Sequential()
+
+        model.add(Dense(64, activation='relu', input_dim=self.state_shape,
+                        kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=l2(1e-4)))
+        model.add(Dense(32, activation='relu',
+                        kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=l2(1e-4)))
+        model.add(Dense(16, activation='relu',
+                        kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=l2(1e-4)))
+        # output layer, linear because the output is
+        model.add(Dense(self.action_shape, activation='linear'))
+
+        model.compile(loss='mse', optimizer=Adam(self.learning_rate))
+
+        return model
+
+    def remember(self, state, action, reward, next_state, done):
+        """
+        Saves piece of memory
+        :param state: state at current timestep
+        :param action: action at current timestep
+        :param reward: reward at current timestep
+        :param next_state: state at next timestep
+        :param done: whether the episode has ended
+        :return:
+        """
+        self.memory.append((state, action, reward, next_state, done))
 
     def act(self, state):
         """
-        :param state: observation
-        :return action given current policy
+        :param state: current state
+        :return: the best action according to current policy
         """
-        return np.random.randint(0, 5)
+        if np.random.rand() <= self.epsilon:
+            return np.random.randint(self.action_shape)
+        qvals = self.model.predict(state)
+        return np.argmax(qvals)
 
-    def forward(self, observation):
-        """Takes the an observation from the environment and returns the action to be taken next.
-        If the policy is implemented by a neural network, this corresponds to a forward (inference) pass.
-        # Argument
-            observation (object): The current observation from the environment.
-        # Returns
-            The next action to be executed in the environment.
+    def replay(self, batch_size):
         """
-        raise NotImplementedError()
+        Performs experience replay
+        :param batch_size:
+        :return:
+        """
+        if len(self.memory) > self.min_memories:
+            minibatch = sample(self.memory, batch_size)
 
-    def backward(self, reward, terminal):
-        """Updates the agent after having executed the action returned by `forward`.
-        If the policy is implemented by a neural network, this corresponds to a weight update using back-prop.
-        # Argument
-            reward (float): The observed reward after executing the action returned by `forward`.
-            terminal (boolean): `True` if the new state of the environment is terminal.
-        # Returns
-            List of metrics values
-        """
-        raise NotImplementedError()
+            for state, action, reward, next_state, done in minibatch:
+                target = reward
+                if not done:
+                    # estimate future rewards as
+                    # reward + (discount rate gamma) * (maximum target Q based on future action a')
+                    target += self.gamma * np.amax(self.model.predict(next_state)[0])
 
-    def _build_model(self):
-        """Compiles an agent and the underlaying models to be used for training and testing.
-        """
-        raise NotImplementedError()
+                target_f = self.model.predict(state)
+                target_f[0][action] = target
 
-    def load_weights(self, filepath):
-        """Loads the weights of an agent from an HDF5 file.
-        # Arguments
-            filepath (str): The path to the HDF5 file.
-        """
-        raise NotImplementedError()
+                self.model.fit(state, target_f, epochs=1, verbose=0)
 
-    def save_weights(self, filepath, overwrite=False):
-        """Saves the weights of an agent as an HDF5 file.
-        # Arguments
-            filepath (str): The path to where the weights should be saved.
-            overwrite (boolean): If `False` and `filepath` already exists, raises an error.
-        """
-        raise NotImplementedError()
+            if self.epsilon > self.epsilon_min:
+                self.epsilon *= self.epsilon_decay
+
+    def load(self, name):
+        self.model.load_weights(name)
+
+    def save(self, name):
+        self.model.save(name)
