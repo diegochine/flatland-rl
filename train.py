@@ -28,12 +28,6 @@ x = layers.Flatten()(inputs)
 x = layers.Dense(512, activation='relu',
                  kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
                  bias_regularizer=l2(1e-4))(x)
-x = layers.Dense(512, activation='relu',
-                 kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
-                 bias_regularizer=l2(1e-4))(x)
-x = layers.Dense(256, activation='relu',
-                 kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
-                 bias_regularizer=l2(1e-4))(x)
 x = layers.Dense(256, activation='relu',
                  kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
                  bias_regularizer=l2(1e-4))(x)
@@ -73,11 +67,9 @@ for episode in range(cfg.N_EPISODES):
             agent.remember(state[a], action_dict[a], all_rewards[a], next_state[a], done[a])
             score += all_rewards[a]
         state = next_state
-
-        if done:
-            print(f'EPISODE: {episode:4d}/{cfg.N_EPISODES:4d}, SCORE: {score:4d}, EPS: {agent.epsilon}')
         step += 1
 
+    print(f'EPISODE: {episode:4d}/{cfg.N_EPISODES:4d}, SCORE: {score:4.0f}, EPS: {agent.epsilon}')
     agent.replay(cfg.BATCH_SIZE)
 
     if (episode % 1000) == 0:

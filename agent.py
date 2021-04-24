@@ -68,7 +68,7 @@ class DQNAgent:
         """
         if np.random.rand() <= self.epsilon:
             return np.random.randint(self.action_shape)
-        qvals = self.model.predict(state)
+        qvals = self.model.predict(state.reshape(1, *state.shape))
         return np.argmax(qvals)
 
     def replay(self, batch_size):
@@ -82,10 +82,12 @@ class DQNAgent:
 
             for state, action, reward, next_state, done in minibatch:
                 target = reward
+                state = state.reshape(1, *state.shape)
                 if not done:
+                    next_state = next_state.reshape(1, *next_state.shape)
                     # estimate future rewards as
                     # reward + (discount rate gamma) * (maximum target Q based on future action a')
-                    target += self.gamma * np.amax(self.model.predict(next_state)[0])
+                    target += self.gamma * np.amax(self.model.predict(next_state))
 
                 target_f = self.model.predict(state)
                 target_f[0][action] = target
