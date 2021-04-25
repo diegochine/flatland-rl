@@ -25,10 +25,13 @@ if not os.path.exists(cfg.OUTPUT_DIR):
 state_size = (env.width, env.height, 23)
 inputs = layers.Input(shape=state_size)
 x = layers.Flatten()(inputs)
-x = layers.Dense(512, activation='relu',
+x = layers.Dense(256, activation='relu',
                  kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
                  bias_regularizer=l2(1e-4))(x)
 x = layers.Dense(256, activation='relu',
+                 kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
+                 bias_regularizer=l2(1e-4))(x)
+x = layers.Dense(128, activation='relu',
                  kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
                  bias_regularizer=l2(1e-4))(x)
 x = layers.Dense(128, activation='relu',
@@ -51,7 +54,7 @@ for episode in range(cfg.N_EPISODES):
     step = 0
     done = {'__all__': False}
 
-    while not done['__all__'] and step < 1000:
+    while not done['__all__'] and step < cfg.MAX_STEPS:
         # env.render()
         # Chose an action for each agent in the environment
         for a in range(env.get_num_agents()):

@@ -5,6 +5,7 @@ from keras.models import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
 from keras.regularizers import l1_l2, l2
+import memory as mem
 import config as cfg
 
 
@@ -16,7 +17,7 @@ class DQNAgent:
         self.state_shape = state_shape
         self.action_shape = action_shape
 
-        self.memory = deque(maxlen=memory_size)
+        self.memory = mem.Memory(size_long=memory_size)
         self.gamma = gamma
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
@@ -59,7 +60,8 @@ class DQNAgent:
         :param done: whether the episode has ended
         :return:
         """
-        self.memory.append((state, action, reward, next_state, done))
+        self.memory.commit_stmemory({'state': state, 'action': action, 'reward': reward,
+                                     'next_state': next_state, 'q_value': None, 'done': done})
 
     def act(self, state):
         """
@@ -77,18 +79,26 @@ class DQNAgent:
         :param batch_size:
         :return:
         """
+        q_value = -50
+        for fragment in reversed(self.memory.last_episode()):
+            if fragment['done']:
+                q_value = fragment['reward']
+                fragment['q_value'] = q_value
+            else:
+                q_value += self.gamma * fragment['reward']
+                fragment['q_value'] = q_value
+            print(q_value)
+
+        self.memory.commit_ltmemory()
+
         if len(self.memory) > self.min_memories:
-            minibatch = sample(self.memory, batch_size)
+            minibatch = self.memory.sample(batch_size)
 
-            for state, action, reward, next_state, done in minibatch:
-                target = reward
+            for fragment in minibatch:
+                target = fragment['q_value']
+                action = fragment['action']
+                state = fragment['state']
                 state = state.reshape(1, *state.shape)
-                if not done:
-                    next_state = next_state.reshape(1, *next_state.shape)
-                    # estimate future rewards as
-                    # reward + (discount rate gamma) * (maximum target Q based on future action a')
-                    target += self.gamma * np.amax(self.model.predict(next_state))
-
                 target_f = self.model.predict(state)
                 target_f[0][action] = target
 
