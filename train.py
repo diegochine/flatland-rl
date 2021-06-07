@@ -6,11 +6,14 @@ from flatland.utils.rendertools import RenderTool
 from keras import layers
 from keras.models import Model
 from keras.regularizers import l1_l2, l2
+from tensorflow.python.keras.optimizer_v2.rmsprop import RMSprop
 
 import processor
 import config as cfg
 import logger as log
-from agent import DQNAgent
+from drl.agents.dqn_agent import DQNAgent
+from drl.memory.prioritizedbuffer import PrioritizedBuffer
+from drl.networks.qnetwork import QNetwork
 
 env = RailEnv(width=cfg.WIDTH, height=cfg.HEIGHT,
               rail_generator=random_rail_generator(),
@@ -23,6 +26,12 @@ if not os.path.exists(cfg.OUTPUT_DIR):
     os.makedirs(cfg.OUTPUT_DIR)
 
 state_size = (env.width, env.height, 23)
+action_size = env.action_space.n
+buffer = PrioritizedBuffer()
+q_net = QNetwork(state_size, action_size)
+player = DQNAgent(state_size, action_size, q_network=q_net, buffer=buffer, optimizer=RMSprop(momentum=0.1), name='flatland')
+
+
 inputs = layers.Input(shape=state_size)
 x = layers.Flatten()(inputs)
 x = layers.Dense(256, activation='relu',
