@@ -28,28 +28,11 @@ if not os.path.exists(cfg.OUTPUT_DIR):
 state_size = (env.width, env.height, 23)
 action_size = env.action_space.n
 buffer = PrioritizedBuffer()
-q_net = QNetwork(state_size, action_size)
-player = DQNAgent(state_size, action_size, q_network=q_net, buffer=buffer, optimizer=RMSprop(momentum=0.1), name='flatland')
+q_net = QNetwork(state_size, action_size, conv_layer_params=[(5, 3, 1), (3, 2, 1)], fc_layer_params=(256, 128))
+player = DQNAgent(state_size, action_size, q_network=q_net, buffer=buffer, optimizer=RMSprop(momentum=0.1), name='flatland_global')
 
-
-inputs = layers.Input(shape=state_size)
-x = layers.Flatten()(inputs)
-x = layers.Dense(256, activation='relu',
-                 kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
-                 bias_regularizer=l2(1e-4))(x)
-x = layers.Dense(256, activation='relu',
-                 kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
-                 bias_regularizer=l2(1e-4))(x)
-x = layers.Dense(128, activation='relu',
-                 kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
-                 bias_regularizer=l2(1e-4))(x)
-x = layers.Dense(128, activation='relu',
-                 kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4),
-                 bias_regularizer=l2(1e-4))(x)
-output = layers.Dense(cfg.NUM_ACTIONS, activation='linear')(x)
-q_network = Model(inputs=inputs, outputs=output)
-
-agent = DQNAgent(state_size, cfg.NUM_ACTIONS, model=q_network)
+logger.info("Memory Initialization")
+player.memory_init(env, cfg.MAX_STEPS, cfg.MIN_MEMORIES)
 
 # Empty dictionary for all agent action
 action_dict = dict()
@@ -67,7 +50,7 @@ for episode in range(cfg.N_EPISODES):
         # env.render()
         # Chose an action for each agent in the environment
         for a in range(env.get_num_agents()):
-            action = agent.act(state[a])
+            action = player.act(state[a])
             action_dict.update({a: action})
 
         next_obs, all_rewards, done, info = env.step(action_dict)
@@ -76,15 +59,15 @@ for episode in range(cfg.N_EPISODES):
         next_state = {o: processor.process_observation(next_obs[o]) for o in next_obs}
 
         for a in range(env.get_num_agents()):
-            agent.remember(state[a], action_dict[a], all_rewards[a], next_state[a], done[a])
+            player.remember(state[a], action_dict[a], all_rewards[a], next_state[a], done[a])
             score += all_rewards[a]
         state = next_state
         step += 1
 
-    print(f'EPISODE: {episode:4d}/{cfg.N_EPISODES:4d}, SCORE: {score:4.0f}, EPS: {agent.epsilon}')
-    agent.replay(cfg.BATCH_SIZE)
+    print(f'EPISODE: {episode:4d}/{cfg.N_EPISODES:4d}, SCORE: {score:4.0f}, EPS: {player.epsilon}')
+    player.train(cfg.BATCH_SIZE)
 
     if (episode % 1000) == 0:
-        agent.save(cfg.OUTPUT_DIR + f"/ep{episode}.hdf5")
+        player.save()
 
-agent.save(cfg.OUTPUT_DIR + "endrun.hdf5")
+player.save()
