@@ -49,7 +49,7 @@ class FlatlandDQNAgent(DQNAgent):
         while self.memory_len <= min_memories:
             next_obs, info = env.reset()
             if processor is not None:
-                state = {o: processor(next_obs[o]) for o in next_obs}
+                state = {a: processor(next_obs[a]) for a in range(env.get_num_agents())}
             else:
                 state = next_obs
             done = {'__all__': False}
@@ -61,7 +61,13 @@ class FlatlandDQNAgent(DQNAgent):
                     act = np.random.choice(actions, 1)[0]
                     action_dict.update({a: act})
                 next_obs, r, done, _ = env.step(action_dict)
-                next_state = {o: processor(next_obs[o]) for o in next_obs}
+                if processor is not None:
+                    next_state = {a: None for a in range(env.get_num_agents())}
+                    next_state.update({a: processor(next_obs[a])
+                                       for a in range(env.get_num_agents())
+                                       if next_obs[a] is not None})
+                else:
+                    next_state = next_obs
                 for a in range(env.get_num_agents()):
                     self.remember(state[a], action_dict[a], r[a], next_state[a], done[a])
                 state = next_state

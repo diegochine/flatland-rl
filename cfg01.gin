@@ -1,6 +1,7 @@
 train_agent.width = 15
 train_agent.height = 15
 train_agent.n_agents = 1
+train_agent.tree_depth = 2
 
 QNetwork.conv_layer_params = [(5, 3, 1), (3, 2, 1)]
 QNetwork.fc_layer_params = (256, 128)

@@ -1,7 +1,7 @@
 import os
 import gin
 from argparse import ArgumentParser
-from flatland.envs.observations import GlobalObsForRailEnv
+from flatland.envs.observations import TreeObsForRailEnv
 from flatland.envs.rail_env import RailEnv
 from flatland.envs.rail_generators import random_rail_generator
 from flatland.utils.rendertools import RenderTool
@@ -14,12 +14,12 @@ from flatland_agent import FlatlandDQNAgent
 
 
 @gin.configurable
-def train_agent(width, height, n_agents, n_episodes=10000, batch_size=128,
+def train_agent(width, height, n_agents, tree_depth, n_episodes=10000, batch_size=128,
                 max_steps=500, min_memories=5000, output_dir="./output/"):
     env = RailEnv(width=width, height=height,
                   rail_generator=random_rail_generator(),
                   number_of_agents=n_agents,
-                  obs_builder_object=GlobalObsForRailEnv())
+                  obs_builder_object=TreeObsForRailEnv(max_depth=tree_depth))
     env_renderer = RenderTool(env)
 
     if not os.path.exists(output_dir):
@@ -32,7 +32,7 @@ def train_agent(width, height, n_agents, n_episodes=10000, batch_size=128,
     player = FlatlandDQNAgent(state_size, action_size, q_network=q_net, buffer=buffer,
                               optimizer=RMSprop(momentum=0.1))
 
-    player.memory_init(env, max_steps, min_memories, list(range(5)), processor=processor.process_observation)
+    player.memory_init(env, max_steps, min_memories, list(range(5)), processor=processor.normalize_observation)
 
     # Empty dictionary for all agent action
     action_dict = dict()
@@ -40,7 +40,7 @@ def train_agent(width, height, n_agents, n_episodes=10000, batch_size=128,
     for episode in range(n_episodes):
 
         next_obs, info = env.reset()
-        state = {o: processor.process_observation(next_obs[o]) for o in next_obs}
+        state = {a: processor.normalize_observation(next_obs[a], tree_depth) for a in range(env.get_num_agents())}
         score = 0
         step = 0
         done = {'__all__': False}
@@ -54,7 +54,10 @@ def train_agent(width, height, n_agents, n_episodes=10000, batch_size=128,
             next_obs, all_rewards, done, info = env.step(action_dict)
             env_renderer.render_env(show=True, show_observations=True, show_predictions=False)
 
-            next_state = {o: processor.process_observation(next_obs[o]) for o in next_obs}
+            next_state = {a: None for a in range(env.get_num_agents())}
+            next_state.update({a: processor.normalize_observation(next_obs[a], tree_depth)
+                               for a in range(env.get_num_agents())
+                               if next_obs[a] is not None})
 
             for a in range(env.get_num_agents()):
                 player.remember(state[a], action_dict[a], all_rewards[a], next_state[a], done[a])
