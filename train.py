@@ -1,11 +1,15 @@
 import os
+from collections import deque
+
 import gin
 from argparse import ArgumentParser
+
+import numpy as np
 from flatland.envs.observations import TreeObsForRailEnv
 from flatland.envs.rail_env import RailEnv
 from flatland.envs.rail_generators import random_rail_generator
 from flatland.utils.rendertools import RenderTool
-from tensorflow.python.keras.optimizer_v2.rmsprop import RMSprop
+from tensorflow.python.keras.optimizer_v2.adam import Adam
 
 import processor
 from memory import PrioritizedBuffer
@@ -14,28 +18,28 @@ from flatland_agent import FlatlandDQNAgent
 
 
 @gin.configurable
-def train_agent(width, height, n_agents, tree_depth, n_episodes=10000, batch_size=128,
-                max_steps=500, min_memories=5000, output_dir="./output/"):
+def train_agent(width, height, n_agents, tree_depth, state_shape, action_shape, n_episodes=10001,
+                batch_size=128, learning_rate=0.0001,  max_steps=500, min_memories=5000, output_dir="./output/"):
     env = RailEnv(width=width, height=height,
                   rail_generator=random_rail_generator(),
                   number_of_agents=n_agents,
                   obs_builder_object=TreeObsForRailEnv(max_depth=tree_depth))
-    env_renderer = RenderTool(env)
+    # env_renderer = RenderTool(env)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    state_size = (env.width, env.height, 23)
-    action_size = 5  # TODO try changing to n_agents x 5
     buffer = PrioritizedBuffer()
-    q_net = QNetwork(state_size, action_size)
-    player = FlatlandDQNAgent(state_size, action_size, q_network=q_net, buffer=buffer,
-                              optimizer=RMSprop(momentum=0.1))
+    q_net = QNetwork(state_shape, action_shape)
+    optim = Adam(learning_rate=learning_rate)
+    player = FlatlandDQNAgent(state_shape, action_shape, q_network=q_net, buffer=buffer,
+                              optimizer=optim)
 
     player.memory_init(env, max_steps, min_memories, list(range(5)), processor=processor.normalize_observation)
 
     # Empty dictionary for all agent action
     action_dict = dict()
+    scores = deque(maxlen=100)
 
     for episode in range(n_episodes):
 
@@ -52,7 +56,7 @@ def train_agent(width, height, n_agents, tree_depth, n_episodes=10000, batch_siz
                 action_dict.update({a: action})
 
             next_obs, all_rewards, done, info = env.step(action_dict)
-            env_renderer.render_env(show=True, show_observations=True, show_predictions=False)
+            # env_renderer.render_env(show=True, show_observations=True, show_predictions=False)
 
             next_state = {a: None for a in range(env.get_num_agents())}
             next_state.update({a: processor.normalize_observation(next_obs[a], tree_depth)
@@ -63,15 +67,16 @@ def train_agent(width, height, n_agents, tree_depth, n_episodes=10000, batch_siz
                 player.remember(state[a], action_dict[a], all_rewards[a], next_state[a], done[a])
                 score += all_rewards[a]
             state = next_state
+            if step % 100 == 0:
+                player.train(batch_size)
             step += 1
-
-        print(f'EPISODE: {episode:4d}/{n_episodes:4d}, SCORE: {score:4.0f}, EPS: {player.epsilon}')
-        player.train(batch_size)
+        scores.append(score)
+        print(f'EPISODE: {episode:4d}/{n_episodes:4d}, SCORE: {np.mean(scores):4.0f}, EPS: {player.epsilon}')
 
         if (episode % 1000) == 0:
-            player.save()
+            player.save(ver=episode//1000)
 
-    player.save()
+    player.save(ver='final')
 
 
 if __name__ == "__main__":
