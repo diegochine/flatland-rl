@@ -1,5 +1,6 @@
 from typing import Optional
 
+import gin
 import numpy as np
 import tensorflow as tf
 
@@ -10,6 +11,7 @@ from networks import QNetwork
 from utils import types
 
 
+@gin.configurable
 class FlatlandDQNAgent(DQNAgent):
     def __init__(self,
                  state_shape: tuple,
