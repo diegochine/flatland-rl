@@ -1,16 +1,16 @@
 from typing import Optional
 
 import numpy as np
+import tensorflow as tf
 
 from agents import DQNAgent
 from memory import Buffer
 from networks import QNetwork
-import tensorflow as tf
 
 from utils import types
 
 
-class FlatDqnAgent(DQNAgent):
+class FlatlandDQNAgent(DQNAgent):
     def __init__(self,
                  state_shape: tuple,
                  action_shape: tuple,
@@ -27,21 +27,57 @@ class FlatDqnAgent(DQNAgent):
                  name: str = 'FlatlandDQNAgent',
                  training: bool = True,
                  save_dir: str = './output'):
-        super(FlatDqnAgent, self).__init__(state_shape,
-                                           action_shape,
-                                           q_network,
-                                           optimizer,
-                                           gamma,
-                                           epsilon,
-                                           epsilon_decay,
-                                           epsilon_min,
-                                           target_update_period,
-                                           tau,
-                                           ddqn,
-                                           buffer,
-                                           name,
-                                           training,
-                                           save_dir)
+        super(FlatlandDQNAgent, self).__init__(state_shape,
+                                               action_shape,
+                                               q_network,
+                                               optimizer,
+                                               gamma,
+                                               epsilon,
+                                               epsilon_decay,
+                                               epsilon_min,
+                                               target_update_period,
+                                               tau,
+                                               ddqn,
+                                               buffer,
+                                               name,
+                                               training,
+                                               save_dir)
+
+    def memory_init(self, env, max_steps, min_memories, actions=None, processor=None):
+        while self.memory_len <= min_memories:
+            next_obs, info = env.reset()
+            if processor is not None:
+                state = {o: processor(next_obs[o]) for o in next_obs}
+            else:
+                state = next_obs
+            done = {'__all__': False}
+            step = 0
+            action_dict = dict()
+            self._memory.commit_ltmemory()
+            while not done['__all__'] and step < max_steps:
+                for a in range(env.get_num_agents()):
+                    act = np.random.choice(actions, 1)[0]
+                    action_dict.update({a: act})
+                next_obs, r, done, _ = env.step(action_dict)
+                next_state = {o: processor(next_obs[o]) for o in next_obs}
+                for a in range(env.get_num_agents()):
+                    self.remember(state[a], action_dict[a], r[a], next_state[a], done[a])
+                state = next_state
+                step += 1
+
+    def remember(self, state, action, reward, next_state, done):
+        """
+        Saves piece of memory
+        :param state: state at current timestep
+        :param action: action at current timestep
+        :param reward: reward at current timestep
+        :param next_state: state at next timestep
+        :param done: whether the episode has ended
+        :return:
+        """
+        if done:
+            next_state = np.empty_like(state)
+        self._memory.commit_stmemory([state, action, reward, next_state, done])
 
     def _minibatch_to_tf(self, minibatch):
         """ Given a list of experience tuples (s_t, a_t, r_t, s_t+1, done_t)
@@ -50,7 +86,6 @@ class FlatDqnAgent(DQNAgent):
                                             for sample in minibatch])
         action_batch = tf.convert_to_tensor([sample[1] for sample in minibatch])
         reward_batch = tf.convert_to_tensor([sample[2] for sample in minibatch])
-        # FIXME when done new_state is none
         new_state_batch = tf.convert_to_tensor([sample[3].reshape(self.state_shape)
                                                 for sample in minibatch])
         done_batch = np.array([sample[4] for sample in minibatch])
