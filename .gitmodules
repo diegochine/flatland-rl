@@ -1,3 +1,0 @@
-[submodule "drl"]
-	path = drl
-	url = https://github.com/diegochine/deep-reinforcement-learning
