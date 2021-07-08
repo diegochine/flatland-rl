@@ -4,11 +4,10 @@ import gin
 import numpy as np
 import tensorflow as tf
 
-from agents import DQNAgent
-from memory import Buffer
-from networks import QNetwork
-
-from utils import types
+from pyagents.agents import DQNAgent
+from pyagents.memory import Buffer
+from pyagents.networks import QNetwork
+from pyagents.utils import types
 
 
 @gin.configurable
@@ -46,6 +45,7 @@ class FlatlandDQNAgent(DQNAgent):
                                                save_dir)
 
     def memory_init(self, env, max_steps, min_memories, actions=None, processor=None):
+        print('Initializing memories buffer')
         while self.memory_len <= min_memories:
             next_obs, info = env.reset()
             if processor is not None:
@@ -58,9 +58,12 @@ class FlatlandDQNAgent(DQNAgent):
             self._memory.commit_ltmemory()
             while not done['__all__'] and step < max_steps:
                 for a in range(env.get_num_agents()):
-                    act = np.random.choice(actions, 1)[0]
-                    action_dict.update({a: act})
-                next_obs, r, done, _ = env.step(action_dict)
+                    if info['action_required'][a]:
+                        action = np.random.choice(actions, 1)[0]
+                    else:
+                        action = 0
+                    action_dict.update({a: action})
+                next_obs, r, done, info = env.step(action_dict)
                 if processor is not None:
                     next_state = {a: None for a in range(env.get_num_agents())}
                     next_state.update({a: processor(next_obs[a])
@@ -69,7 +72,8 @@ class FlatlandDQNAgent(DQNAgent):
                 else:
                     next_state = next_obs
                 for a in range(env.get_num_agents()):
-                    self.remember(state[a], action_dict[a], r[a], next_state[a], done[a])
+                    if state[a] is not None:
+                        self.remember(state[a], action_dict[a], r[a], next_state[a], done[a])
                 state = next_state
                 step += 1
 
@@ -84,7 +88,7 @@ class FlatlandDQNAgent(DQNAgent):
         :return:
         """
         if done:
-            next_state = np.empty_like(state)
+            next_state = np.zeros_like(state)
         self._memory.commit_stmemory([state, action, reward, next_state, done])
 
     def _minibatch_to_tf(self, minibatch):

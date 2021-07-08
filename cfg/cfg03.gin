@@ -1,0 +1,20 @@
+flatland_train.width = 25
+flatland_train.height = 25
+flatland_train.n_agents = 4
+flatland_train.tree_depth = 2
+flatland_train.state_shape = (231,)  # depends on tree depth
+flatland_train.action_shape = 5
+flatland_train.learning_rate = 0.00025
+flatland_train.steps_to_train = 5
+
+QNetwork.fc_layer_params = (128, 128, 64)
+QNetwork.dueling = True
+
+FlatlandDQNAgent.target_update_period = 150
+FlatlandDQNAgent.epsilon = 1
+FlatlandDQNAgent.epsilon_decay = 0.9997
+FlatlandDQNAgent.ddqn = False
+FlatlandDQNAgent.name='flatland_tree3'
+
+PrioritizedBuffer.size_long = 100000
+PrioritizedBuffer.beta = (0.3, 1.0, 10000)

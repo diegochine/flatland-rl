@@ -82,13 +82,13 @@ def _split_node_into_feature_groups(node) -> (np.ndarray, np.ndarray, np.ndarray
     return data, distance, agent_data
 
 
-def _split_subtree_into_feature_groups(node, current_tree_depth: int, max_tree_depth: int) -> (np.ndarray, np.ndarray, np.ndarray):
-
+def _split_subtree_into_feature_groups(node, current_tree_depth: int, max_tree_depth: int) -> (
+np.ndarray, np.ndarray, np.ndarray):
     if node == -np.inf:
         remaining_depth = max_tree_depth - current_tree_depth
         # reference: https://stackoverflow.com/questions/515214/total-number-of-nodes-in-a-tree-data-structure
-        num_remaining_nodes = int((4**(remaining_depth+1) - 1) / (4 - 1))
-        return [-np.inf] * num_remaining_nodes*6, [-np.inf] * num_remaining_nodes, [-np.inf] * num_remaining_nodes*4
+        num_remaining_nodes = int((4 ** (remaining_depth + 1) - 1) / (4 - 1))
+        return [-np.inf] * num_remaining_nodes * 6, [-np.inf] * num_remaining_nodes, [-np.inf] * num_remaining_nodes * 4
 
     data, distance, agent_data = _split_node_into_feature_groups(node)
 
@@ -96,7 +96,9 @@ def _split_subtree_into_feature_groups(node, current_tree_depth: int, max_tree_d
         return data, distance, agent_data
 
     for direction in TreeObsForRailEnv.tree_explored_actions_char:
-        sub_data, sub_distance, sub_agent_data = _split_subtree_into_feature_groups(node.childs[direction], current_tree_depth + 1, max_tree_depth)
+        sub_data, sub_distance, sub_agent_data = _split_subtree_into_feature_groups(node.childs[direction],
+                                                                                    current_tree_depth + 1,
+                                                                                    max_tree_depth)
         data = np.concatenate((data, sub_data))
         distance = np.concatenate((distance, sub_distance))
         agent_data = np.concatenate((agent_data, sub_agent_data))
@@ -111,7 +113,8 @@ def split_tree_into_feature_groups(tree, max_tree_depth: int) -> (np.ndarray, np
     data, distance, agent_data = _split_node_into_feature_groups(tree)
 
     for direction in TreeObsForRailEnv.tree_explored_actions_char:
-        sub_data, sub_distance, sub_agent_data = _split_subtree_into_feature_groups(tree.childs[direction], 1, max_tree_depth)
+        sub_data, sub_distance, sub_agent_data = _split_subtree_into_feature_groups(tree.childs[direction], 1,
+                                                                                    max_tree_depth)
         data = np.concatenate((data, sub_data))
         distance = np.concatenate((distance, sub_distance))
         agent_data = np.concatenate((agent_data, sub_agent_data))
@@ -129,4 +132,5 @@ def normalize_observation(observation, tree_depth: int = 2, observation_radius=0
     distance = norm_obs_clip(distance, normalize_to_range=True)
     agent_data = np.clip(agent_data, -1, 1)
     normalized_obs = np.concatenate((np.concatenate((data, distance)), agent_data))
-    return normalized_obs.reshape((*normalized_obs.shape, 1))
+    assert np.inf not in normalized_obs
+    return normalized_obs.reshape((1, *normalized_obs.shape))
