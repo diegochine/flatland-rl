@@ -122,10 +122,13 @@ def split_tree_into_feature_groups(tree, max_tree_depth: int) -> (np.ndarray, np
     return data, distance, agent_data
 
 
-def normalize_observation(observation, tree_depth: int = 2, observation_radius=0):
+def normalize_observation(observation, tree_depth: int = 2, observation_radius=10):
     """
     This function normalizes the observation used by the RL algorithm
     """
+    if observation is None:
+        return np.zeros((1, 231))
+
     data, distance, agent_data = split_tree_into_feature_groups(observation, tree_depth)
 
     data = norm_obs_clip(data, fixed_radius=observation_radius)
