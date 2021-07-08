@@ -134,3 +134,8 @@ def normalize_observation(observation, tree_depth: int = 2, observation_radius=0
     normalized_obs = np.concatenate((np.concatenate((data, distance)), agent_data))
     assert np.inf not in normalized_obs
     return normalized_obs.reshape((1, *normalized_obs.shape))
+
+
+def combine_observations(observation, tree_depth=2):
+    state = [normalize_observation(observation[a], tree_depth) for a in observation.keys()]
+    return np.concatenate(state)
