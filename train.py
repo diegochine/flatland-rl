@@ -1,15 +1,13 @@
 import os
-import random
 import gin
 import numpy as np
-import matplotlib.pyplot as plt
+import wandb
 from argparse import ArgumentParser
 
 from flatland.envs.observations import TreeObsForRailEnv
 from flatland.envs.rail_env import RailEnv
 from flatland.envs.rail_generators import sparse_rail_generator
 from flatland.utils.rendertools import RenderTool
-from pyagents.utils import plot_result
 from tensorflow.python.keras.optimizer_v2.adam import Adam
 
 from pyagents.memory import PrioritizedBuffer
@@ -17,18 +15,25 @@ from pyagents.networks import QNetwork
 from processor import normalize_observation
 from flatland_agent import FlatlandDQNAgent
 
+MED_SIZE = {
+    'env': {'width': 20, 'height': 20, 'random_seed': 42},
+    'rail_gen': {'max_num_cities': 3, 'max_rails_between_cities': 10, 'max_rails_in_city': 2, 'seed': 42}
+}
+BIG_SIZE = {
+    'env': {'width': 45, 'height': 45, 'random_seed': 42},
+    'rail_gen': {'max_num_cities': 8, 'max_rails_between_cities': 5, 'max_rails_in_city': 3, 'seed': 42}
+}
+
 
 @gin.configurable
-def flatland_train(width, height, n_agents, tree_depth, state_shape, action_shape, n_episodes=500, steps_to_train=4,
-                   batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=20000, output_dir="./output/"):
-    rail_generator = sparse_rail_generator(max_num_cities=n_agents, seed=random.randint(0, 10000),
-                                           max_rails_between_cities=10, max_rails_in_city=2)
-    env = RailEnv(width=width, height=height,
+def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_episodes=500, steps_to_train=4,
+                   batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=0, output_dir="./output/"):
+    rail_generator = sparse_rail_generator(**params['rail_gen'])
+    env = RailEnv(**params['env'],
                   rail_generator=rail_generator,
                   number_of_agents=n_agents,
-                  obs_builder_object=TreeObsForRailEnv(max_depth=tree_depth),
-                  random_seed=random.randint(0, 10000))
-    # env_renderer = RenderTool(env)
+                  obs_builder_object=TreeObsForRailEnv(max_depth=tree_depth))
+    # env_renderer = RenderTool(env, screen_height=1500, screen_width=1500)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -38,6 +43,14 @@ def flatland_train(width, height, n_agents, tree_depth, state_shape, action_shap
     optim = Adam(learning_rate=learning_rate)
     player = FlatlandDQNAgent(state_shape, action_shape, q_network=q_net, buffer=buffer,
                               optimizer=optim)
+    wandb.config.update({'learning_rate': learning_rate,
+                         'batch_size': batch_size,
+                         'steps_to_train': steps_to_train,
+                         'n_agents': n_agents,
+                         **player.get_config(),
+                         **q_net.get_config(),
+                         **buffer.get_config()})
+
     scores = []
     arrival_scores = []
     movavg100 = []
@@ -89,14 +102,15 @@ def flatland_train(width, height, n_agents, tree_depth, state_shape, action_shap
         this_episode_arrival = np.mean(arrival_scores[-100:])
         movavg100.append(this_episode_score)
         eps_history.append(player.epsilon)
+        wandb.log({"arrival": arrival_scores[-1], 'score': score})
         if episode % 10 == 0:
-            print(f'===============================================\n'
+            print(f'=========================================\n'
                   f'EPISODE: {episode:4d}/{n_episodes:4d}, SCORE: {movavg100[-1]:4.0f}\n'
-                  f'ARRIVAL RATE: {this_episode_arrival*100:3.0f}%, EPS: {player.epsilon:.2f}\n'
-                  f'===============================================')
+                  f'ARRIVAL RATE: {this_episode_arrival * 100:3.0f}%, EPS: {player.epsilon:.2f}\n'
+                  f'=========================================)')
 
         if (episode % 500) == 0:
-            player.save(ver=episode // 500)
+            player.save(ver=(episode // 500))
 
     player.save(ver='final')
     return scores, movavg100, eps_history, arrival_scores
@@ -105,28 +119,21 @@ def flatland_train(width, height, n_agents, tree_depth, state_shape, action_shap
 if __name__ == "__main__":
     parser = ArgumentParser(description="Script for training flatland agents")
     parser.add_argument('-c', '--config', nargs='+', help='path to gin config file(s) ', required=True)
+    parser.add_argument('-a', '--agents', type=int, help='number of agents', required=True)
+    parser.add_argument('--big', dest='big_map', help='use big map (always used when #agents > 2)',
+                        action='store_true', default=False)
+    parser.add_argument('-k', '--key', type=str, help='API key for WandB', required=True)
     args = parser.parse_args()
+    params = BIG_SIZE if args.big_map or args.agents > 2 else MED_SIZE
     results = []
     arrivals = []
+    wandb.login(key=args.key)
     for cfg_file in args.config:
         gin.parse_config_file(cfg_file)
+        wandb.init(project='flatland')
         print(f'******************************************************\n'
               f'STARTING TRAINING FOR {cfg_file}\n'
               f'******************************************************\n')
-        info = flatland_train()
+        info = flatland_train(params=params, n_agents=args.agents)
         results.append((cfg_file, info[:-1]))
         arrivals.append((cfg_file, info[-1]))
-
-    ncols = 2
-    nrows = len(args.config) // 2
-    plot_result((ncols, nrows), results)
-
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, sharex='all', sharey='all', constrained_layout=True)
-    axes = axes.reshape(-1)
-    for i, (name, arrival) in enumerate(arrivals):
-        ax = axes[i]
-        ax.set_title(name)
-        ax.hist(arrival, bins=5, density=True)
-        ax.set_ylabel('Bins size')
-        ax.set_xlabel('Episode')
-    plt.show()

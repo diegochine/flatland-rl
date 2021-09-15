@@ -28,21 +28,21 @@ class FlatlandDQNAgent(DQNAgent):
                  name: str = 'FlatlandDQNAgent',
                  training: bool = True,
                  save_dir: str = './output'):
-        super(FlatlandDQNAgent, self).__init__(state_shape,
-                                               action_shape,
-                                               q_network,
-                                               optimizer,
-                                               gamma,
-                                               epsilon,
-                                               epsilon_decay,
-                                               epsilon_min,
-                                               target_update_period,
-                                               tau,
-                                               ddqn,
-                                               buffer,
-                                               name,
-                                               training,
-                                               save_dir)
+        super(FlatlandDQNAgent, self).__init__(state_shape=state_shape,
+                                               action_shape=action_shape,
+                                               q_network=q_network,
+                                               optimizer=optimizer,
+                                               gamma=gamma,
+                                               epsilon=epsilon,
+                                               epsilon_decay=epsilon_decay,
+                                               epsilon_min=epsilon_min,
+                                               target_update_period=target_update_period,
+                                               tau=tau,
+                                               ddqn=ddqn,
+                                               buffer=buffer,
+                                               name=name,
+                                               training=training,
+                                               save_dir=save_dir)
 
     def memory_init(self, env, max_steps, min_memories, actions=None, processor=None):
         print('Initializing memories buffer')
