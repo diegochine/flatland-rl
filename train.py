@@ -5,13 +5,13 @@ import wandb
 from argparse import ArgumentParser
 
 from flatland.envs.observations import TreeObsForRailEnv
-from flatland.envs.rail_env import RailEnv
 from flatland.envs.rail_generators import sparse_rail_generator
 from flatland.utils.rendertools import RenderTool
 from tensorflow.python.keras.optimizer_v2.adam import Adam
 
 from pyagents.memory import PrioritizedBuffer
 from pyagents.networks import QNetwork
+from rail_env import RailEnvWrapper
 from processor import normalize_observation
 from flatland_agent import FlatlandDQNAgent
 
@@ -27,12 +27,12 @@ BIG_SIZE = {
 
 @gin.configurable
 def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_episodes=500, steps_to_train=4,
-                   batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=0, output_dir="./output/"):
+                   batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=1000, output_dir="./output/"):
     rail_generator = sparse_rail_generator(**params['rail_gen'])
-    env = RailEnv(**params['env'],
-                  rail_generator=rail_generator,
-                  number_of_agents=n_agents,
-                  obs_builder_object=TreeObsForRailEnv(max_depth=tree_depth))
+    env = RailEnvWrapper(**params['env'],
+                         rail_generator=rail_generator,
+                         number_of_agents=n_agents,
+                         obs_builder_object=TreeObsForRailEnv(max_depth=tree_depth))
     # env_renderer = RenderTool(env, screen_height=1500, screen_width=1500)
 
     if not os.path.exists(output_dir):
@@ -69,7 +69,7 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
         step = 0
         done = {'__all__': False}
 
-        while not done['__all__'] and step < max_steps:
+        while not done['__all__'] and step < max_steps and not all(info['deadlock'].values()):
             # Chose an action for each agent in the environment
             for a in range(env.get_num_agents()):
                 if info['action_required'][a]:
@@ -97,12 +97,16 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
 
         scores.append(score)
         trains_arrived = sum([done[a] for a in range(env.get_num_agents())])
+        trains_deadlocked = sum(info['deadlock'].values())
         arrival_scores.append(trains_arrived / n_agents)
         this_episode_score = np.mean(scores[-100:])
         this_episode_arrival = np.mean(arrival_scores[-100:])
         movavg100.append(this_episode_score)
         eps_history.append(player.epsilon)
-        wandb.log({"arrival": arrival_scores[-1], 'score': score})
+        wandb.log({'score': score,
+                   "arrivals": trains_arrived / n_agents,
+                   "deadlocks": trains_deadlocked / n_agents,
+                   "epsilon": player.epsilon})
         if episode % 10 == 0:
             print(f'=========================================\n'
                   f'EPISODE: {episode:4d}/{n_episodes:4d}, SCORE: {movavg100[-1]:4.0f}\n'

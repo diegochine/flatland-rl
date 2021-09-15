@@ -1,6 +1,3 @@
-flatland_train.width = 25
-flatland_train.height = 25
-flatland_train.n_agents = 4
 flatland_train.tree_depth = 2
 flatland_train.state_shape = (231,)  # depends on tree depth
 flatland_train.action_shape = 5
