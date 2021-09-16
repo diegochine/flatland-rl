@@ -233,7 +233,8 @@ class RailEnvWrapper(RailEnv):
 
         optionals = {}
         if regenerate_rail or self.rail is None:
-            rail, optionals = self.rail_generator(self.width, self.height, self.number_of_agents, self.num_resets)
+            rail, optionals = self.rail_generator(self.width, self.height, self.number_of_agents, self.num_resets,
+                                                  np_random=np.random.RandomState())
 
             self.rail = rail
             self.height, self.width = self.rail.grid.shape
@@ -252,7 +253,7 @@ class RailEnvWrapper(RailEnv):
                 agents_hints = optionals['agents_hints']
 
             schedule = self.schedule_generator(self.rail, self.number_of_agents, agents_hints, self.num_resets,
-                                               np_random=np.random.default_rng())
+                                               np_random=np.random.RandomState())
             self.agents = EnvAgent.from_schedule(schedule)
 
             if agents_hints and 'city_orientations' in agents_hints:
