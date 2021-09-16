@@ -60,8 +60,8 @@ class RailEnvWrapper(RailEnv):
     complexity managable.
     """
     alpha = 1
-    beta = 3
-    gamma = 10
+    beta = 10
+    gamma = 1
     # Epsilon to avoid rounding errors
     epsilon = 0.01
     invalid_action_penalty = 0
