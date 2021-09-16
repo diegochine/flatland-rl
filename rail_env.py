@@ -64,7 +64,7 @@ class RailEnvWrapper(RailEnv):
     gamma = 0
     # Epsilon to avoid rounding errors
     epsilon = 0.01
-    invalid_action_penalty = -1
+    invalid_action_penalty = 0
     step_penalty = -1 * alpha
     global_reward = 1 * beta
     stop_penalty = 0.2  # penalty for stopping a moving agent
@@ -324,7 +324,7 @@ class RailEnvWrapper(RailEnv):
                 "deadlock": {}
             }
             for i_agent, agent in enumerate(self.agents):
-                self.rewards_dict[i_agent] = self.global_reward
+                self.rewards_dict[i_agent] = self.global_reward if not self.deadlocks[i_agent] else self.deadlock_penalty
                 info_dict["action_required"][i_agent] = False
                 info_dict["malfunction"][i_agent] = 0
                 info_dict["speed"][i_agent] = 0

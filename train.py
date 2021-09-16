@@ -5,6 +5,7 @@ import wandb
 from argparse import ArgumentParser
 
 from flatland.envs.observations import TreeObsForRailEnv
+from flatland.envs.predictions import ShortestPathPredictorForRailEnv
 from flatland.envs.rail_generators import sparse_rail_generator
 from flatland.utils.rendertools import RenderTool
 from tensorflow.python.keras.optimizer_v2.adam import Adam
@@ -16,23 +17,24 @@ from processor import normalize_observation
 from flatland_agent import FlatlandDQNAgent
 
 MED_SIZE = {
-    'env': {'width': 20, 'height': 20, 'random_seed': 42},
-    'rail_gen': {'max_num_cities': 3, 'max_rails_between_cities': 10, 'max_rails_in_city': 2, 'seed': 42}
+    'env': {'width': 48, 'height': 27, 'random_seed': 42},
+    'rail_gen': {'max_num_cities': 5, 'max_rails_between_cities': 2, 'max_rails_in_city': 3, 'seed': 42}
 }
 BIG_SIZE = {
-    'env': {'width': 45, 'height': 45, 'random_seed': 42},
-    'rail_gen': {'max_num_cities': 8, 'max_rails_between_cities': 5, 'max_rails_in_city': 3, 'seed': 42}
+    'env': {'width': 64, 'height': 36, 'random_seed': 42},
+    'rail_gen': {'max_num_cities': 9, 'max_rails_between_cities': 5, 'max_rails_in_city': 5, 'seed': 42}
 }
 
 
 @gin.configurable
-def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_episodes=500, steps_to_train=4,
-                   batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=1000, output_dir="./output/"):
+def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_episodes=1000, steps_to_train=4,
+                   batch_size=256, learning_rate=0.0001, max_steps=250, min_memories=5000, output_dir="./output/"):
     rail_generator = sparse_rail_generator(**params['rail_gen'])
+    tree_obs = TreeObsForRailEnv(max_depth=tree_depth, predictor=ShortestPathPredictorForRailEnv())
     env = RailEnvWrapper(**params['env'],
                          rail_generator=rail_generator,
                          number_of_agents=n_agents,
-                         obs_builder_object=TreeObsForRailEnv(max_depth=tree_depth))
+                         obs_builder_object=tree_obs)
     # env_renderer = RenderTool(env, screen_height=1500, screen_width=1500)
 
     if not os.path.exists(output_dir):
@@ -89,7 +91,7 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
             for a in range(env.get_num_agents()):
                 if state[a] is not None:
                     player.remember(state[a], action_dict[a], all_rewards[a], next_state[a], done[a])
-                score += all_rewards[a]
+                score += all_rewards[a] / n_agents
             state = next_state
             if step % steps_to_train == 0:
                 player.train(batch_size)
@@ -104,8 +106,8 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
         movavg100.append(this_episode_score)
         eps_history.append(player.epsilon)
         wandb.log({'score': score,
-                   "arrivals": trains_arrived / n_agents,
-                   "deadlocks": trains_deadlocked / n_agents,
+                   "arrivals": trains_arrived,
+                   "deadlocks": trains_deadlocked,
                    "epsilon": player.epsilon})
         if episode % 10 == 0:
             print(f'=========================================\n'
@@ -128,16 +130,17 @@ if __name__ == "__main__":
                         action='store_true', default=False)
     parser.add_argument('-k', '--key', type=str, help='API key for WandB', required=True)
     args = parser.parse_args()
-    params = BIG_SIZE if args.big_map or args.agents > 2 else MED_SIZE
+    params = BIG_SIZE if args.big_map or args.agents > 3 else MED_SIZE
     results = []
     arrivals = []
     wandb.login(key=args.key)
     for cfg_file in args.config:
         gin.parse_config_file(cfg_file)
-        wandb.init(project='flatland')
+        run = wandb.init(project='flatland', group=f"{args.agents}-agents", reinit=True)
         print(f'******************************************************\n'
               f'STARTING TRAINING FOR {cfg_file}\n'
               f'******************************************************\n')
         info = flatland_train(params=params, n_agents=args.agents)
         results.append((cfg_file, info[:-1]))
         arrivals.append((cfg_file, info[-1]))
+        run.finish()
