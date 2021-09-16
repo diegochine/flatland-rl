@@ -129,7 +129,7 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
 
         if episode % episodes_to_test == 0:
             player.toggle_training()
-            flatland_test(params['env']['width'], params['env']['height'], n_agents, tree_depth,
+            flatland_test(params['env']['width'], params['env']['height'], action_shape, n_agents, tree_depth,
                           max_num_cities=params['rail_gen']['max_num_cities'],
                           max_rails_between_cities=params['rail_gen']['max_rails_between_cities'],
                           max_rails_in_city=params['rail_gen']['max_rails_in_city'],

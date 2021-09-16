@@ -1,5 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from flatland.envs.agent_utils import RailAgentStatus
+from flatland.envs.rail_env import RailEnvActions
+
 import wandb
 from flatland.envs.observations import TreeObsForRailEnv
 from flatland.envs.predictions import ShortestPathPredictorForRailEnv
@@ -11,7 +14,7 @@ from processor import normalize_observation
 from rail_env import RailEnvWrapper
 
 
-def flatland_test(width, height, n_agents, tree_depth, max_num_cities=0, max_rails_between_cities=10, max_rails_in_city=2,
+def flatland_test(width, height, action_shape, n_agents, tree_depth, max_num_cities=0, max_rails_between_cities=10, max_rails_in_city=2,
                   agent=None, path=None, n_episodes=10, max_steps=200):
     if max_num_cities == 0:
         max_num_cities = n_agents
@@ -55,7 +58,11 @@ def flatland_test(width, height, n_agents, tree_depth, max_num_cities=0, max_rai
             # Chose an action for each agent in the environment
             for a in range(env.get_num_agents()):
                 if info['action_required'][a]:
-                    action = player.act(state[a])
+                    mask = np.full(action_shape, True)
+                    if info["status"][a] == RailAgentStatus.ACTIVE:
+                        for action in RailEnvActions:
+                            mask[int(action)] = env._check_action_on_agent(action, env.agents[a])[-1]
+                    action = player.act(state[a], mask=mask)
                 else:
                     action = 0
                 action_dict.update({a: action})

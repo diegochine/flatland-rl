@@ -61,7 +61,7 @@ class RailEnvWrapper(RailEnv):
     """
     alpha = 1
     beta = 2
-    gamma = 0
+    gamma = 1
     # Epsilon to avoid rounding errors
     epsilon = 0.01
     invalid_action_penalty = 0
@@ -70,8 +70,9 @@ class RailEnvWrapper(RailEnv):
     stop_penalty = 0.2  # penalty for stopping a moving agent
     start_penalty = 0.5  # penalty for starting a stopped agent
 
-    reducing_distance_step = -1 * gamma
-    deadlock_penalty = -10
+    reducing_distance_step = 1 * gamma
+    deadlock_penalty = -3
+    not_moving_penalty = 0.8
 
     def __init__(self,
                  width,
@@ -290,6 +291,7 @@ class RailEnvWrapper(RailEnv):
         self.obs_builder.reset()
         self.distance_map.reset(self.agents, self.rail)
         self.deadlocks = [False] * self.number_of_agents
+        self.previous_distance = [np.linalg.norm(np.asarray(a.position) - np.asarray(a.target)) for a in self.agents]
         info_dict: Dict = {
             'action_required': {i: self.action_required(agent) for i, agent in enumerate(self.agents)},
             'malfunction': {
@@ -325,7 +327,8 @@ class RailEnvWrapper(RailEnv):
                 "deadlock": {}
             }
             for i_agent, agent in enumerate(self.agents):
-                self.rewards_dict[i_agent] = self.global_reward if not self.deadlocks[i_agent] else self.deadlock_penalty
+                self.rewards_dict[i_agent] = self.global_reward if not self.deadlocks[
+                    i_agent] else self.deadlock_penalty
                 info_dict["action_required"][i_agent] = False
                 info_dict["malfunction"][i_agent] = 0
                 info_dict["speed"][i_agent] = 0
@@ -524,7 +527,15 @@ class RailEnvWrapper(RailEnv):
                 self._remove_agent_from_scene(agent)
             else:
                 # if the agent is reducing the distance from the target, i.e. it is getting closer, it is penalised less
-                self.rewards_dict[i_agent] += self.step_penalty * agent.speed_data['speed']
+                if (np.linalg.norm(np.asarray(agent.position) - np.asarray(agent.target)) <= self.previous_distance[i_agent]) \
+                        and (self.reducing_distance_step != 0):
+                    self.rewards_dict[i_agent] += self.reducing_distance_step * agent.speed_data['speed']
+                else:
+                    self.rewards_dict[i_agent] += self.step_penalty * agent.speed_data['speed']
+
+                self.previous_distance[i_agent] = np.linalg.norm(np.asarray(agent.position) - np.asarray(agent.target))
         else:
             # step penalty if not moving (stopped now or before)
             self.rewards_dict[i_agent] += self.step_penalty * agent.speed_data['speed']
+            # Additional penalty for not moving
+            self.rewards_dict[i_agent] += self.not_moving_penalty * agent.speed_data['speed']
