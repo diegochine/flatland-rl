@@ -4,10 +4,13 @@ import numpy as np
 import wandb
 from argparse import ArgumentParser
 
+from flatland.envs.rail_env import RailEnvActions
+from flatland.envs.agent_utils import RailAgentStatus
 from flatland.envs.observations import TreeObsForRailEnv
 from flatland.envs.predictions import ShortestPathPredictorForRailEnv
 from flatland.envs.rail_generators import sparse_rail_generator
 from flatland.utils.rendertools import RenderTool
+
 from tensorflow.python.keras.optimizer_v2.adam import Adam
 
 from pyagents.memory import PrioritizedBuffer
@@ -29,7 +32,8 @@ BIG_SIZE = {
 
 @gin.configurable
 def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_episodes=1000, episodes_to_test=50,
-                   steps_to_train=4, batch_size=256, learning_rate=0.0001, max_steps=250, min_memories=1000, output_dir="./output/"):
+                   steps_to_train=4, batch_size=256, learning_rate=0.0001, max_steps=250, min_memories=1000,
+                   output_dir="./output/"):
     rail_generator = sparse_rail_generator(**params['rail_gen'])
     tree_obs = TreeObsForRailEnv(max_depth=tree_depth, predictor=ShortestPathPredictorForRailEnv())
     env = RailEnvWrapper(**params['env'],
@@ -76,7 +80,11 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
             # Chose an action for each agent in the environment
             for a in range(env.get_num_agents()):
                 if info['action_required'][a]:
-                    action = player.act(state[a])
+                    mask = np.full(action_shape, True)
+                    if info["status"][a] == RailAgentStatus.ACTIVE:
+                        for action in RailEnvActions:
+                            mask[int(action)] = env._check_action_on_agent(action, env.agents[a])[-1]
+                    action = player.act(state[a], mask=mask)
                 else:
                     action = 0
                 action_dict.update({a: action})
@@ -107,9 +115,9 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
         movavg100.append(this_episode_score)
         eps_history.append(player.epsilon)
         wandb.log({'train': {'score': score,
-                   "arrivals": trains_arrived,
-                   "deadlocks": trains_deadlocked,
-                   "epsilon": player.epsilon}})
+                             "arrivals": trains_arrived,
+                             "deadlocks": trains_deadlocked,
+                             "epsilon": player.epsilon}})
         if episode % 10 == 0:
             print(f'=========================================\n'
                   f'EPISODE: {episode:4d}/{n_episodes:4d}, SCORE: {movavg100[-1]:4.0f}\n'
@@ -120,12 +128,14 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
             player.save(ver=(episode // 500))
 
         if episode % episodes_to_test == 0:
+            player.toggle_training()
             flatland_test(params['env']['width'], params['env']['height'], n_agents, tree_depth,
                           max_num_cities=params['rail_gen']['max_num_cities'],
                           max_rails_between_cities=params['rail_gen']['max_rails_between_cities'],
                           max_rails_in_city=params['rail_gen']['max_rails_in_city'],
                           agent=player,
                           n_episodes=20, max_steps=max_steps)
+            player.toggle_training()
 
     player.save(ver='final')
     return scores, movavg100, eps_history, arrival_scores
