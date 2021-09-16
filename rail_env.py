@@ -61,7 +61,7 @@ class RailEnvWrapper(RailEnv):
     """
     alpha = 1
     beta = 3
-    gamma = 2
+    gamma = 10
     # Epsilon to avoid rounding errors
     epsilon = 0.01
     invalid_action_penalty = 0
@@ -71,7 +71,7 @@ class RailEnvWrapper(RailEnv):
     start_penalty = 0.5  # penalty for starting a stopped agent
 
     reducing_distance_step = 1 * gamma
-    deadlock_penalty = -5
+    deadlock_penalty = -10
     not_moving_penalty = 0.8
 
     def __init__(self,
