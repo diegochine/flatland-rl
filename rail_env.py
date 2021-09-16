@@ -291,7 +291,7 @@ class RailEnvWrapper(RailEnv):
         self.obs_builder.reset()
         self.distance_map.reset(self.agents, self.rail)
         self.deadlocks = [False] * self.number_of_agents
-        self.previous_distance = [np.linalg.norm(np.asarray(a.position) - np.asarray(a.target)) for a in self.agents]
+        self.previous_distance = [np.linalg.norm(np.asarray(a.initial_position) - np.asarray(a.target)) for a in self.agents]
         info_dict: Dict = {
             'action_required': {i: self.action_required(agent) for i, agent in enumerate(self.agents)},
             'malfunction': {
