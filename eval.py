@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from flatland.envs.agent_utils import RailAgentStatus
 from flatland.envs.rail_env import RailEnvActions
 
@@ -15,7 +14,7 @@ from rail_env import RailEnvWrapper
 
 
 def flatland_test(width, height, action_shape, n_agents, tree_depth, max_num_cities=0, max_rails_between_cities=10, max_rails_in_city=2,
-                  agent=None, path=None, n_episodes=10, max_steps=200):
+                  agent=None, path=None, n_episodes=10, max_steps=200, use_wandb=False):
     if max_num_cities == 0:
         max_num_cities = n_agents
     rail_generator = sparse_rail_generator(max_num_cities=max_num_cities,
@@ -86,11 +85,10 @@ def flatland_test(width, height, action_shape, n_agents, tree_depth, max_num_cit
         arrival_scores.append(trains_arrived)
         deadlocks_scores.append(trains_deadlocked)
         scores.append(score)
-
-    wandb.log({'test': {'score': np.mean(scores),
-                        'arrivals': np.mean(arrival_scores),
-                        'deadlocks': np.mean(deadlocks_scores)}})
-
+    if use_wandb:
+        wandb.log({'test': {'score': np.mean(scores),
+                            'arrivals': np.mean(arrival_scores),
+                            'deadlocks': np.mean(deadlocks_scores)}})
 
     # env_renderer.close_window()
     # return scores, movavg100, arrival_scores
