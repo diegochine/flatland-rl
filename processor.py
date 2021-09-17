@@ -2,10 +2,22 @@ import numpy as np
 from flatland.envs.observations import TreeObsForRailEnv
 
 
-def process_observation(observation):
-    if observation is None:
-        return None
-    return np.concatenate(observation, axis=2)
+class Processor:
+
+    def __init__(self, multiple_obs=False, tree_depth=2):
+        self.multiple_obs = multiple_obs
+        self.tree_depth = tree_depth
+
+    def process(self, obs):
+        if not self.multiple_obs:
+            return {a: normalize_observation(obs[a], self.tree_depth) for a in obs.keys()}
+        else:
+            complete_obs = {a: normalize_observation(obs[a], self.tree_depth) for a in obs.keys()}
+            clipped_obs = {a: normalize_observation(obs[a], self.tree_depth - 1) for a in obs.keys()}
+            combined_obs = {ai: np.concatenate([complete_obs[ai]] + [clipped_obs[aj] for aj in obs.keys() if aj != ai],
+                                               axis=1)
+                            for ai in obs.keys()}
+            return combined_obs
 
 
 def max_lt(seq, val):
@@ -16,7 +28,7 @@ def max_lt(seq, val):
     max = 0
     idx = len(seq) - 1
     while idx >= 0:
-        if seq[idx] < val and seq[idx] >= 0 and seq[idx] > max:
+        if val > seq[idx] >= 0 and seq[idx] > max:
             max = seq[idx]
         idx -= 1
     return max
@@ -30,7 +42,7 @@ def min_gt(seq, val):
     min = np.inf
     idx = len(seq) - 1
     while idx >= 0:
-        if seq[idx] >= val and seq[idx] < min:
+        if val <= seq[idx] < min:
             min = seq[idx]
         idx -= 1
     return min
@@ -83,7 +95,7 @@ def _split_node_into_feature_groups(node) -> (np.ndarray, np.ndarray, np.ndarray
 
 
 def _split_subtree_into_feature_groups(node, current_tree_depth: int, max_tree_depth: int) -> (
-np.ndarray, np.ndarray, np.ndarray):
+        np.ndarray, np.ndarray, np.ndarray):
     if node == -np.inf:
         remaining_depth = max_tree_depth - current_tree_depth
         # reference: https://stackoverflow.com/questions/515214/total-number-of-nodes-in-a-tree-data-structure

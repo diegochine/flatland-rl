@@ -16,7 +16,7 @@ from tensorflow.python.keras.optimizer_v2.adam import Adam
 from pyagents.memory import PrioritizedBuffer, UniformBuffer
 from pyagents.networks import QNetwork
 from rail_env import RailEnvWrapper
-from processor import normalize_observation
+from processor import Processor
 from flatland_agent import FlatlandDQNAgent
 from eval import flatland_test
 
@@ -31,18 +31,27 @@ BIG_SIZE = {
 
 
 @gin.configurable
-def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_episodes=1000, episodes_to_test=50,
-                   steps_to_train=8, batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=10000,
+def flatland_train(params, n_agents, tree_depth, action_shape, n_episodes=1000, episodes_to_test=50, multiple_obs=False,
+                   steps_to_train=8, batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=-1,
                    iterative=True, warm_up_episodes=200, use_wandb=False, prioritized=True, output_dir="./output/"):
+    if multiple_obs:
+        state_shape = (11 * sum(4**i for i in range(tree_depth + 1)) + sum(4**i for i in range(tree_depth)),)
+    else:
+        state_shape = (11 * sum(4**i for i in range(tree_depth + 1)))
+    proc = Processor(multiple_obs=multiple_obs, tree_depth=tree_depth)
     buffer = PrioritizedBuffer() if prioritized else UniformBuffer()
     q_net = QNetwork(state_shape, action_shape)
     optim = Adam(learning_rate=learning_rate)
     player = FlatlandDQNAgent(state_shape, action_shape, q_network=q_net, buffer=buffer, optimizer=optim)
     if use_wandb:
-        wandb.config.update({'learning_rate': learning_rate,
+        wandb.config.update({'state_shape': state_shape,
+                             'learning_rate': learning_rate,
                              'batch_size': batch_size,
                              'steps_to_train': steps_to_train,
                              'n_agents': n_agents,
+                             'prioritized': prioritized,
+                             'iterative': iterative,
+                             'multiple_obs': multiple_obs,
                              **player.get_config(),
                              **q_net.get_config(),
                              **buffer.get_config()})
@@ -61,12 +70,12 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
                                rail_generator=rail_generator,
                                number_of_agents=n,
                                obs_builder_object=tree_obs) for n in range(1, n_agents)]
-        for e in envs:
-            player.memory_init(e, max_steps, min_memories//(n_agents-1), list(range(5)), processor=normalize_observation)
-
-        for episode in range(1, warm_up_episodes + 1):
-            done, info, score = run_episode(action_shape, batch_size, envs[episode % (n_agents-1)], max_steps, n_agents,
-                                            player, steps_to_train, tree_depth)
+        for i, env in enumerate(envs):
+            player.memory_init(env, max_steps, min_memories // (n_agents - 1), list(range(5)), processor=proc)
+            for episode in range(1, warm_up_episodes + 1):
+                done, info, score = run_episode(action_shape=action_shape, batch_size=batch_size,
+                                                env=env, max_steps=max_steps, n_agents=i+1,
+                                                player=player, steps_to_train=steps_to_train, proc=proc)
         player.policy.set('_epsilon', eps)
         player.policy.set('_epsilon_decay', eps_decay)
         print(f'=========================================\n'
@@ -85,12 +94,12 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
     scores = []
     arrival_scores = []
     movavg100 = []
-    player.memory_init(env, max_steps, min_memories, list(range(5)), processor=normalize_observation)
+    player.memory_init(env, max_steps, min_memories, list(range(5)), processor=proc)
 
     for episode in range(1, n_episodes + 1):
-
-        done, info, score = run_episode(action_shape, batch_size, env, max_steps, n_agents, player, steps_to_train,
-                                        tree_depth)
+        done, info, score = run_episode(action_shape=action_shape, batch_size=batch_size,
+                                        env=env, max_steps=max_steps, n_agents=n_agents,
+                                        player=player, steps_to_train=steps_to_train, proc=proc)
         scores.append(score)
         trains_arrived = sum([done[a] for a in range(env.get_num_agents())])
         trains_deadlocked = sum(info['deadlock'].values())
@@ -123,12 +132,12 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
     return scores, movavg100, arrival_scores
 
 
-def run_episode(action_shape, batch_size, env, max_steps, n_agents, player, steps_to_train, tree_depth):
+def run_episode(action_shape, batch_size, env, max_steps, n_agents, player, steps_to_train, proc):
     # Empty dictionary for all agent action
     action_dict = dict()
     next_obs, info = env.reset()
     # env_renderer.reset()
-    state = {a: normalize_observation(next_obs[a], tree_depth) for a in range(env.get_num_agents())}
+    state = proc.process(next_obs)
     score = 0
     step = 0
     done = {'__all__': False}
@@ -145,13 +154,13 @@ def run_episode(action_shape, batch_size, env, max_steps, n_agents, player, step
                 action = 0
             action_dict.update({a: action})
 
-        next_obs, all_rewards, done, info = env.step(action_dict)
-        # env_renderer.render_env(show=True, show_observations=True, show_predictions=False)
-
-        next_state = {a: None for a in range(env.get_num_agents())}
-        next_state.update({a: normalize_observation(next_obs[a], tree_depth)
-                           for a in range(env.get_num_agents())
-                           if next_obs[a] is not None})
+            next_obs, all_rewards, done, info = env.step(action_dict)
+            # env_renderer.render_env(show=True, show_observations=True, show_predictions=False)
+            next_state = proc.process(next_obs)
+            # next_state = {a: None for a in range(env.get_num_agents())}
+            # next_state.update({a: normalize_observation(next_obs[a], tree_depth)
+            #                    for a in range(env.get_num_agents())
+            #                    if next_obs[a] is not None})
 
         for a in range(env.get_num_agents()):
             if state[a] is not None:
