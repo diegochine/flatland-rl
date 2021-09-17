@@ -1,4 +1,6 @@
 from typing import List, Optional, Dict
+
+import gin
 import numpy as np
 from flatland.core.env_observation_builder import ObservationBuilder
 from flatland.core.transition_map import GridTransitionMap
@@ -11,6 +13,7 @@ from flatland.envs.rail_generators import random_rail_generator, RailGenerator
 from flatland.envs.schedule_generators import random_schedule_generator, ScheduleGenerator
 
 
+@gin.configurable
 class RailEnvWrapper(RailEnv):
     """
     RailEnv environment class.
@@ -59,32 +62,19 @@ class RailEnvWrapper(RailEnv):
     poisson process with a certain rate. Not all trains will be affected by malfunctions during episodes to keep
     complexity managable.
     """
-    alpha = 1
-    beta = 10
-    gamma = 1
-    # Epsilon to avoid rounding errors
-    epsilon = 0.01
-    invalid_action_penalty = 0
-    step_penalty = -1 * alpha
-    global_reward = 1 * beta
-    stop_penalty = 0.2  # penalty for stopping a moving agent
-    start_penalty = 0.5  # penalty for starting a stopped agent
 
-    reducing_distance_step = 1 * gamma
-    deadlock_penalty = -10
-    not_moving_penalty = 0.8
+    # Epsilon to avoid rounding errors LOL
+    epsilon = 0.01
 
     def __init__(self,
-                 width,
-                 height,
+                 width, height, number_of_agents=1,
                  rail_generator: RailGenerator = random_rail_generator(),
                  schedule_generator: ScheduleGenerator = random_schedule_generator(),
-                 number_of_agents=1,
                  obs_builder_object: ObservationBuilder = GlobalObsForRailEnv(),
                  malfunction_generator_and_process_data=no_malfunction_generator(),
-                 remove_agents_at_target=True,
-                 random_seed=1,
-                 record_steps=False
+                 remove_agents_at_target=True, random_seed=1, record_steps=False,
+                 alpha=1, beta=5, theta=0, deadlock_penalty=-5, standing_penalty=-1,
+                 stop_penalty=-0.2, start_penalty=-0.5
                  ):
         """
         Environment init.
@@ -127,9 +117,17 @@ class RailEnvWrapper(RailEnv):
         self.previous_distance = [400] * number_of_agents
 
         self.deadlocks = [False] * number_of_agents
-
-        # Wait before Deadlock
         self.wait_deadlock = [0] * number_of_agents
+
+        # penalties and rewards
+        self.step_penalty = -1 * alpha
+        self.global_reward = beta
+        self.invalid_action_penalty = 0
+        self.stop_penalty = stop_penalty  # penalty for stopping a moving agent
+        self.start_penalty = start_penalty  # penalty for starting a stopped agent
+        self.reducing_distance_step = theta
+        self.deadlock_penalty = deadlock_penalty
+        self.standing_penalty = standing_penalty
 
         self.malfunction_generator, self.malfunction_process_data = malfunction_generator_and_process_data
         self.rail_generator: RailGenerator = rail_generator
@@ -291,7 +289,8 @@ class RailEnvWrapper(RailEnv):
         self.obs_builder.reset()
         self.distance_map.reset(self.agents, self.rail)
         self.deadlocks = [False] * self.number_of_agents
-        self.previous_distance = [np.linalg.norm(np.asarray(a.initial_position) - np.asarray(a.target)) for a in self.agents]
+        self.previous_distance = [np.linalg.norm(np.asarray(a.initial_position) - np.asarray(a.target)) for a in
+                                  self.agents]
         info_dict: Dict = {
             'action_required': {i: self.action_required(agent) for i, agent in enumerate(self.agents)},
             'malfunction': {
@@ -527,7 +526,8 @@ class RailEnvWrapper(RailEnv):
                 self._remove_agent_from_scene(agent)
             else:
                 # if the agent is reducing the distance from the target, i.e. it is getting closer, it is penalised less
-                if (np.linalg.norm(np.asarray(agent.position) - np.asarray(agent.target)) <= self.previous_distance[i_agent]) \
+                if (np.linalg.norm(np.asarray(agent.position) - np.asarray(agent.target)) <= self.previous_distance[
+                    i_agent]) \
                         and (self.reducing_distance_step != 0):
                     self.rewards_dict[i_agent] += self.reducing_distance_step * agent.speed_data['speed']
                 else:
@@ -538,4 +538,4 @@ class RailEnvWrapper(RailEnv):
             # step penalty if not moving (stopped now or before)
             self.rewards_dict[i_agent] += self.step_penalty * agent.speed_data['speed']
             # Additional penalty for not moving
-            self.rewards_dict[i_agent] += self.not_moving_penalty * agent.speed_data['speed']
+            self.rewards_dict[i_agent] += self.standing_penalty

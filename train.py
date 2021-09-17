@@ -13,12 +13,12 @@ from flatland.utils.rendertools import RenderTool
 
 from tensorflow.python.keras.optimizer_v2.adam import Adam
 
-from pyagents.memory import PrioritizedBuffer
+from pyagents.memory import PrioritizedBuffer, UniformBuffer
 from pyagents.networks import QNetwork
 from rail_env import RailEnvWrapper
 from processor import normalize_observation
 from flatland_agent import FlatlandDQNAgent
-from test import flatland_test
+from eval import flatland_test
 
 MED_SIZE = {
     'env': {'width': 48, 'height': 27, 'random_seed': 42},
@@ -32,8 +32,20 @@ BIG_SIZE = {
 
 @gin.configurable
 def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_episodes=1000, episodes_to_test=50,
-                   steps_to_train=4, batch_size=256, learning_rate=0.0001, max_steps=250, min_memories=1000,
-                   output_dir="./output/"):
+                   steps_to_train=8, batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=10000,
+                   iterative=True, prioritized=True, output_dir="./output/"):
+    buffer = PrioritizedBuffer() if prioritized else UniformBuffer()
+    q_net = QNetwork(state_shape, action_shape)
+    optim = Adam(learning_rate=learning_rate)
+    player = FlatlandDQNAgent(state_shape, action_shape, q_network=q_net, buffer=buffer, optimizer=optim)
+    wandb.config.update({'learning_rate': learning_rate,
+                         'batch_size': batch_size,
+                         'steps_to_train': steps_to_train,
+                         'n_agents': n_agents,
+                         **player.get_config(),
+                         **q_net.get_config(),
+                         **buffer.get_config()})
+
     rail_generator = sparse_rail_generator(**params['rail_gen'])
     tree_obs = TreeObsForRailEnv(max_depth=tree_depth, predictor=ShortestPathPredictorForRailEnv())
     env = RailEnvWrapper(**params['env'],
@@ -44,19 +56,6 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-
-    buffer = PrioritizedBuffer()
-    q_net = QNetwork(state_shape, action_shape)
-    optim = Adam(learning_rate=learning_rate)
-    player = FlatlandDQNAgent(state_shape, action_shape, q_network=q_net, buffer=buffer,
-                              optimizer=optim)
-    wandb.config.update({'learning_rate': learning_rate,
-                         'batch_size': batch_size,
-                         'steps_to_train': steps_to_train,
-                         'n_agents': n_agents,
-                         **player.get_config(),
-                         **q_net.get_config(),
-                         **buffer.get_config()})
 
     scores = []
     arrival_scores = []
@@ -76,7 +75,7 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
         step = 0
         done = {'__all__': False}
 
-        while not done['__all__'] and step < max_steps and not all(info['deadlock'].values()):
+        while not done['__all__'] and step < max_steps:
             # Chose an action for each agent in the environment
             for a in range(env.get_num_agents()):
                 if info['action_required'][a]:
@@ -124,9 +123,6 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
                   f'ARRIVAL RATE: {this_episode_arrival * 100:3.0f}%, EPS: {player.epsilon:.2f}\n'
                   f'=========================================)')
 
-        if (episode % 500) == 0:
-            player.save(ver=(episode // 500))
-
         if episode % episodes_to_test == 0:
             player.toggle_training()
             flatland_test(params['env']['width'], params['env']['height'], action_shape, n_agents, tree_depth,
@@ -135,6 +131,7 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
                           max_rails_in_city=params['rail_gen']['max_rails_in_city'],
                           agent=player,
                           n_episodes=20, max_steps=max_steps)
+            player.save(ver=(episode // episodes_to_test))
             player.toggle_training()
 
     player.save(ver='final')
@@ -148,6 +145,8 @@ if __name__ == "__main__":
     parser.add_argument('--big', dest='big_map', help='use big map (always used when #agents > 2)',
                         action='store_true', default=False)
     parser.add_argument('-k', '--key', type=str, help='API key for WandB', required=True)
+    parser.add_argument('--i', dest='iterative', help='Enable iterative multi agent training',
+                        action='store_true', default=False)
     args = parser.parse_args()
     params = BIG_SIZE if args.big_map or args.agents > 3 else MED_SIZE
     results = []
@@ -160,7 +159,7 @@ if __name__ == "__main__":
         print(f'******************************************************\n'
               f'STARTING TRAINING FOR {cfg_file}\n'
               f'******************************************************\n')
-        info = flatland_train(params=params, n_agents=args.agents)
+        info = flatland_train(params=params, n_agents=args.agents, iterative=args.iterative)
         results.append((cfg_file, info[:-1]))
         arrivals.append((cfg_file, info[-1]))
         run.finish()
