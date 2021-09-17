@@ -33,7 +33,7 @@ BIG_SIZE = {
 @gin.configurable
 def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_episodes=1000, episodes_to_test=50,
                    steps_to_train=8, batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=10000,
-                   iterative=True, prioritized=True, output_dir="./output/", use_wandb=False):
+                   iterative=True, warm_up_episodes=200, use_wandb=False, prioritized=True, output_dir="./output/"):
     buffer = PrioritizedBuffer() if prioritized else UniformBuffer()
     q_net = QNetwork(state_shape, action_shape)
     optim = Adam(learning_rate=learning_rate)
@@ -49,6 +49,30 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
 
     rail_generator = sparse_rail_generator(**params['rail_gen'])
     tree_obs = TreeObsForRailEnv(max_depth=tree_depth, predictor=ShortestPathPredictorForRailEnv())
+
+    if iterative:
+        print(f'=========================================\n'
+              f'STARTING WARM UP\n'
+              f'=========================================')
+        eps_decay = player.policy.get('_epsilon_decay')
+        eps = player.policy.get('_epsilon')
+        player.policy.set('_epsilon', player.policy.get('_epsilon_min'))
+        envs = [RailEnvWrapper(**params['env'],
+                               rail_generator=rail_generator,
+                               number_of_agents=n,
+                               obs_builder_object=tree_obs) for n in range(1, n_agents)]
+        for e in envs:
+            player.memory_init(e, max_steps, min_memories//(n_agents-1), list(range(5)), processor=normalize_observation)
+
+        for episode in range(1, warm_up_episodes + 1):
+            done, info, score = run_episode(action_shape, batch_size, envs[episode % (n_agents-1)], max_steps, n_agents,
+                                            player, steps_to_train, tree_depth)
+        player.policy.set('_epsilon', eps)
+        player.policy.set('_epsilon_decay', eps_decay)
+        print(f'=========================================\n'
+              f'END OF WARM UP\n'
+              f'=========================================')
+
     env = RailEnvWrapper(**params['env'],
                          rail_generator=rail_generator,
                          number_of_agents=n_agents,
@@ -63,48 +87,10 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
     movavg100 = []
     player.memory_init(env, max_steps, min_memories, list(range(5)), processor=normalize_observation)
 
-    # Empty dictionary for all agent action
-    action_dict = dict()
-
     for episode in range(1, n_episodes + 1):
 
-        next_obs, info = env.reset()
-        # env_renderer.reset()
-        state = {a: normalize_observation(next_obs[a], tree_depth) for a in range(env.get_num_agents())}
-        score = 0
-        step = 0
-        done = {'__all__': False}
-
-        while not done['__all__'] and step < max_steps:
-            # Chose an action for each agent in the environment
-            for a in range(env.get_num_agents()):
-                if info['action_required'][a]:
-                    mask = np.full(action_shape, True)
-                    if info["status"][a] == RailAgentStatus.ACTIVE:
-                        for action in RailEnvActions:
-                            mask[int(action)] = env._check_action_on_agent(action, env.agents[a])[-1]
-                    action = player.act(state[a], mask=mask)
-                else:
-                    action = 0
-                action_dict.update({a: action})
-
-            next_obs, all_rewards, done, info = env.step(action_dict)
-            # env_renderer.render_env(show=True, show_observations=True, show_predictions=False)
-
-            next_state = {a: None for a in range(env.get_num_agents())}
-            next_state.update({a: normalize_observation(next_obs[a], tree_depth)
-                               for a in range(env.get_num_agents())
-                               if next_obs[a] is not None})
-
-            for a in range(env.get_num_agents()):
-                if state[a] is not None:
-                    player.remember(state[a], action_dict[a], all_rewards[a], next_state[a], done[a])
-                score += all_rewards[a] / n_agents
-            state = next_state
-            if step % steps_to_train == 0:
-                player.train(batch_size)
-            step += 1
-
+        done, info, score = run_episode(action_shape, batch_size, env, max_steps, n_agents, player, steps_to_train,
+                                        tree_depth)
         scores.append(score)
         trains_arrived = sum([done[a] for a in range(env.get_num_agents())])
         trains_deadlocked = sum(info['deadlock'].values())
@@ -135,6 +121,47 @@ def flatland_train(params, n_agents, tree_depth, state_shape, action_shape, n_ep
 
     player.save(ver='final')
     return scores, movavg100, arrival_scores
+
+
+def run_episode(action_shape, batch_size, env, max_steps, n_agents, player, steps_to_train, tree_depth):
+    # Empty dictionary for all agent action
+    action_dict = dict()
+    next_obs, info = env.reset()
+    # env_renderer.reset()
+    state = {a: normalize_observation(next_obs[a], tree_depth) for a in range(env.get_num_agents())}
+    score = 0
+    step = 0
+    done = {'__all__': False}
+    while not done['__all__'] and step < max_steps:
+        # Chose an action for each agent in the environment
+        for a in range(env.get_num_agents()):
+            if info['action_required'][a]:
+                mask = np.full(action_shape, True)
+                if info["status"][a] == RailAgentStatus.ACTIVE:
+                    for action in RailEnvActions:
+                        mask[int(action)] = env._check_action_on_agent(action, env.agents[a])[-1]
+                action = player.act(state[a], mask=mask)
+            else:
+                action = 0
+            action_dict.update({a: action})
+
+        next_obs, all_rewards, done, info = env.step(action_dict)
+        # env_renderer.render_env(show=True, show_observations=True, show_predictions=False)
+
+        next_state = {a: None for a in range(env.get_num_agents())}
+        next_state.update({a: normalize_observation(next_obs[a], tree_depth)
+                           for a in range(env.get_num_agents())
+                           if next_obs[a] is not None})
+
+        for a in range(env.get_num_agents()):
+            if state[a] is not None:
+                player.remember(state[a], action_dict[a], all_rewards[a], next_state[a], done[a])
+            score += all_rewards[a] / n_agents
+        state = next_state
+        if step % steps_to_train == 0:
+            player.train(batch_size)
+        step += 1
+    return done, info, score
 
 
 if __name__ == "__main__":
