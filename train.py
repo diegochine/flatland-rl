@@ -154,13 +154,9 @@ def run_episode(action_shape, batch_size, env, max_steps, n_agents, player, step
                 action = 0
             action_dict.update({a: action})
 
-            next_obs, all_rewards, done, info = env.step(action_dict)
-            # env_renderer.render_env(show=True, show_observations=True, show_predictions=False)
-            next_state = proc.process(next_obs)
-            # next_state = {a: None for a in range(env.get_num_agents())}
-            # next_state.update({a: normalize_observation(next_obs[a], tree_depth)
-            #                    for a in range(env.get_num_agents())
-            #                    if next_obs[a] is not None})
+        next_obs, all_rewards, done, info = env.step(action_dict)
+        # env_renderer.render_env(show=True, show_observations=True, show_predictions=False)
+        next_state = proc.process(next_obs)
 
         for a in range(env.get_num_agents()):
             if state[a] is not None:
