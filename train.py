@@ -52,8 +52,8 @@ def flatland_train(params, n_agents, tree_depth, action_shape, n_episodes=1000, 
                              'prioritized': prioritized,
                              'iterative': iterative,
                              'multiple_obs': multiple_obs,
-                             **player.get_config(),
                              **q_net.get_config(),
+                             **player.get_config(),
                              **buffer.get_config()})
 
     rail_generator = sparse_rail_generator(**params['rail_gen'])
