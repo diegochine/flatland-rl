@@ -33,12 +33,12 @@ BIG_SIZE = {
 @gin.configurable
 def flatland_train(params, n_agents, tree_depth, action_shape, n_episodes=1000, episodes_to_test=50, multiple_obs=False,
                    steps_to_train=8, batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=-1,
-                   iterative=True, warm_up_episodes=200, use_wandb=False, prioritized=True, output_dir="./output/"):
+                   iterative=False, warm_up_episodes=200, use_wandb=False, prioritized=True, output_dir="./output/"):
     if multiple_obs:
-        state_shape = (11 * sum(4**i for i in range(tree_depth + 1)) + sum(4**i for i in range(tree_depth)),)
+        state_shape = (11 * (sum(4**i for i in range(tree_depth + 1)) + (n_agents - 1) * sum(4**i for i in range(tree_depth))),)
     else:
-        state_shape = (11 * sum(4**i for i in range(tree_depth + 1)))
-    proc = Processor(multiple_obs=multiple_obs, tree_depth=tree_depth)
+        state_shape = (11 * sum(4**i for i in range(tree_depth + 1)),)
+    proc = Processor(multiple_obs=multiple_obs, state_shape=state_shape, tree_depth=tree_depth)
     buffer = PrioritizedBuffer() if prioritized else UniformBuffer()
     q_net = QNetwork(state_shape, action_shape)
     optim = Adam(learning_rate=learning_rate)
@@ -111,11 +111,11 @@ def flatland_train(params, n_agents, tree_depth, action_shape, n_episodes=1000, 
             wandb.log({'train': {'score': score,
                                  "arrivals": trains_arrived,
                                  "deadlocks": trains_deadlocked,
-                                 "epsilon": player.epsilon}})
+                                 "epsilon": player.policy.get('_epsilon')}})
         if episode % 10 == 0:
             print(f'=========================================\n'
                   f'EPISODE: {episode:4d}/{n_episodes:4d}, SCORE: {movavg100[-1]:4.0f}\n'
-                  f'ARRIVAL RATE: {this_episode_arrival * 100:3.0f}%, EPS: {player.epsilon:.2f}\n'
+                  f'ARRIVAL RATE: {this_episode_arrival * 100:3.0f}%, EPS: {player.policy.get("_epsilon"):.2f}\n'
                   f'=========================================)')
 
         if episode % episodes_to_test == 0:
@@ -124,7 +124,7 @@ def flatland_train(params, n_agents, tree_depth, action_shape, n_episodes=1000, 
                           max_num_cities=params['rail_gen']['max_num_cities'],
                           max_rails_between_cities=params['rail_gen']['max_rails_between_cities'],
                           max_rails_in_city=params['rail_gen']['max_rails_in_city'],
-                          agent=player, n_episodes=20, max_steps=max_steps, use_wandb=use_wandb)
+                          agent=player, proc=proc, n_episodes=20, max_steps=max_steps, use_wandb=use_wandb)
             player.save(ver=(episode // episodes_to_test))
             player.toggle_training()
 
@@ -176,8 +176,6 @@ if __name__ == "__main__":
     parser.add_argument('--big', dest='big_map', help='use big map (always used when #agents > 2)',
                         action='store_true', default=False)
     parser.add_argument('-k', '--key', type=str, help='API key for WandB (leave empty to avoid using it)', default='')
-    parser.add_argument('--i', dest='iterative', help='Enable iterative multi agent training',
-                        action='store_true', default=False)
     args = parser.parse_args()
     params = BIG_SIZE if args.big_map or args.agents > 3 else MED_SIZE
     use_wandb = bool(args.key)
@@ -191,7 +189,7 @@ if __name__ == "__main__":
         if use_wandb:
             run = wandb.init(project='flatland', entity='mazelions',
                              group=f"{'BIG_SIZE' if args.big_map or args.agents > 3 else 'MED_SIZE'}", reinit=True)
-            info = flatland_train(params=params, n_agents=args.agents, iterative=args.iterative, use_wandb=use_wandb)
+            info = flatland_train(params=params, n_agents=args.agents, use_wandb=use_wandb)
             run.finish()
         else:
-            info = flatland_train(params=params, n_agents=args.agents, iterative=args.iterative, use_wandb=use_wandb)
+            info = flatland_train(params=params, n_agents=args.agents, use_wandb=use_wandb)

@@ -4,7 +4,8 @@ from flatland.envs.observations import TreeObsForRailEnv
 
 class Processor:
 
-    def __init__(self, multiple_obs=False, tree_depth=2):
+    def __init__(self, state_shape, multiple_obs=False, tree_depth=2):
+        self.state_shape = state_shape
         self.multiple_obs = multiple_obs
         self.tree_depth = tree_depth
 
@@ -104,7 +105,7 @@ def _split_subtree_into_feature_groups(node, current_tree_depth: int, max_tree_d
 
     data, distance, agent_data = _split_node_into_feature_groups(node)
 
-    if not node.childs:
+    if not node.childs or current_tree_depth == max_tree_depth:
         return data, distance, agent_data
 
     for direction in TreeObsForRailEnv.tree_explored_actions_char:
@@ -138,8 +139,9 @@ def normalize_observation(observation, tree_depth: int = 2, observation_radius=1
     """
     This function normalizes the observation used by the RL algorithm
     """
+    state_shape = (11 * sum(4**i for i in range(tree_depth + 1)),)
     if observation is None:
-        return np.zeros((1, 231))
+        return np.zeros((1, *state_shape))
 
     data, distance, agent_data = split_tree_into_feature_groups(observation, tree_depth)
 
@@ -148,7 +150,7 @@ def normalize_observation(observation, tree_depth: int = 2, observation_radius=1
     agent_data = np.clip(agent_data, -1, 1)
     normalized_obs = np.concatenate((np.concatenate((data, distance)), agent_data))
     assert np.inf not in normalized_obs
-    return normalized_obs.reshape((1, *normalized_obs.shape))
+    return normalized_obs.reshape((1, *state_shape))
 
 
 def combine_observations(observation, tree_depth=2):

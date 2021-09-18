@@ -13,8 +13,8 @@ from processor import normalize_observation
 from rail_env import RailEnvWrapper
 
 
-def flatland_test(width, height, action_shape, n_agents, tree_depth, max_num_cities=0, max_rails_between_cities=10, max_rails_in_city=2,
-                  agent=None, path=None, n_episodes=10, max_steps=200, use_wandb=False):
+def flatland_test(width, height, action_shape, n_agents, tree_depth, max_num_cities=0, max_rails_between_cities=10,
+                  max_rails_in_city=2, proc=None, agent=None, path=None, n_episodes=10, max_steps=200, use_wandb=False):
     if max_num_cities == 0:
         max_num_cities = n_agents
     rail_generator = sparse_rail_generator(max_num_cities=max_num_cities,
@@ -41,14 +41,12 @@ def flatland_test(width, height, action_shape, n_agents, tree_depth, max_num_cit
     arrival_scores = []
     deadlocks_scores = []
 
-    # Empty dictionary for all agent action
-    action_dict = dict()
-
     for episode in range(n_episodes):
-
+        # Empty dictionary for all agent action
+        action_dict = dict()
         next_obs, info = env.reset()
         # env_renderer.reset()
-        state = {a: normalize_observation(next_obs[a], tree_depth) for a in range(env.get_num_agents())}
+        state = proc.process(next_obs)
         score = 0
         step = 0
         done = {'__all__': False}
@@ -70,10 +68,7 @@ def flatland_test(width, height, action_shape, n_agents, tree_depth, max_num_cit
 
             # env_renderer.render_env(show=True, show_observations=True, show_predictions=False)
 
-            next_state = {a: None for a in range(env.get_num_agents())}
-            next_state.update({a: normalize_observation(next_obs[a], tree_depth)
-                               for a in range(env.get_num_agents())
-                               if next_obs[a] is not None})
+            next_state = proc.process(next_obs)
 
             for a in range(env.get_num_agents()):
                 score += all_rewards[a]
