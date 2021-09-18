@@ -32,7 +32,7 @@ BIG_SIZE = {
 
 @gin.configurable
 def flatland_train(params, n_agents, tree_depth, action_shape, n_episodes=1000, episodes_to_test=50, multiple_obs=False,
-                   steps_to_train=8, batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=-1,
+                   steps_to_train=8, batch_size=128, learning_rate=0.0001, max_steps=250, min_memories=10000,
                    iterative=False, warm_up_episodes=200, use_wandb=False, prioritized=True, output_dir="./output/"):
     if multiple_obs:
         state_shape = (11 * (sum(4**i for i in range(tree_depth + 1)) + (n_agents - 1) * sum(4**i for i in range(tree_depth))),)
@@ -71,7 +71,8 @@ def flatland_train(params, n_agents, tree_depth, action_shape, n_episodes=1000, 
                                number_of_agents=n,
                                obs_builder_object=tree_obs) for n in range(1, n_agents)]
         for i, env in enumerate(envs):
-            player.memory_init(env, max_steps, min_memories // (n_agents - 1), list(range(5)), processor=proc)
+            player.memory_init(env, max_steps, player.memory_len + (min_memories // (n_agents - 1)),
+                               list(range(5)), processor=proc)
             for episode in range(1, warm_up_episodes + 1):
                 done, info, score = run_episode(action_shape=action_shape, batch_size=batch_size,
                                                 env=env, max_steps=max_steps, n_agents=i+1,
