@@ -113,9 +113,8 @@ class RailEnvWrapper(RailEnv):
         """
         super(RailEnv, self).__init__()
 
-        # Previous distance intialization
+        # aux data structures
         self.previous_distance = [400] * number_of_agents
-
         self.deadlocks = [False] * number_of_agents
         self.wait_deadlock = [0] * number_of_agents
 
@@ -123,8 +122,8 @@ class RailEnvWrapper(RailEnv):
         self.step_penalty = -1 * alpha
         self.global_reward = beta
         self.invalid_action_penalty = 0
-        self.stop_penalty = stop_penalty  # penalty for stopping a moving agent
-        self.start_penalty = start_penalty  # penalty for starting a stopped agent
+        self.stop_penalty = stop_penalty
+        self.start_penalty = start_penalty
         self.reducing_distance_step = theta
         self.deadlock_penalty = deadlock_penalty
         self.standing_penalty = standing_penalty
@@ -174,6 +173,16 @@ class RailEnvWrapper(RailEnv):
         # save episode timesteps ie agent positions, orientations.  (not yet actions / observations)
         self.record_steps = record_steps  # whether to save timesteps
         self.cur_episode = []  # save timesteps in here
+
+    def get_reward_values(self):
+        return {'step_penalty': self.step_penalty,
+                'global_reward': self.global_reward,
+                'invalid_action_penalty': self.invalid_action_penalty,
+                'stop_penalty': self.stop_penalty,
+                'start_penalty': self.start_penalty,
+                'reducing_distance_step': self.reducing_distance_step,
+                'deadlock_penalty': self.deadlock_penalty,
+                'standing_penalty': self.standing_penalty}
 
     @staticmethod
     def compute_max_episode_steps(width: int, height: int, ratio_nr_agents_to_nr_cities: float = 20.0) -> int:

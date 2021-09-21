@@ -88,6 +88,8 @@ def flatland_train(params, n_agents, tree_depth, action_shape, n_episodes=1000, 
                          number_of_agents=n_agents,
                          obs_builder_object=tree_obs)
     # env_renderer = RenderTool(env, screen_height=1500, screen_width=1500)
+    if use_wandb:
+        wandb.config.update(env.get_reward_values())
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
